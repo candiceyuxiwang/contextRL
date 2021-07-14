@@ -1,0 +1,127 @@
+---
+title: "4-arm restless bandit simulation"
+author: "Candice Wang"
+date: "6/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## simulating 4-arm bandit task
+
+First, we can simulate 4 bandits whose reward payoffs drift randomly across trials according to a decaying Gaussian random walk (following [Daw et al., 2006](https://pubmed.ncbi.nlm.nih.gov/16778890/) ).
+
+*Question*: not sure if this is the correct way to operationalize the reward schedule in the Daw study; I cannot find any code or the reward schedule from any paper using that task (according to [Kovach et al. 2012](https://www.jneurosci.org/content/32/25/8434), payoff varied according to a slowly drifting pseudorandom walk that's fixed across subjects, with added Gaussian noise that's different across subject.
+
+```{r reward_sim}
+# random walk function
+RW <- function(N, x0, decay,theta, sd, diffusion_noise) {
+  noise <- rnorm(n=N, mean=0, diffusion_noise)
+  mu <- array()
+  rewards <- array()
+  mu[1] <- x0
+  rewards[1] <- rnorm(1, x0, sd)
+  for(t in 2:N){
+    mu[t] <- mu[t-1]*decay + (1-decay) * theta + noise[t]
+    rewards[t] <- rnorm(1, mu[t], sd)
+  }
+  return(round(rewards))
+}
+
+### some variables
+total_trials <- 150
+# initial values (can be changed!)
+R1 <- 80 
+R2 <- 75
+R3 <- 40
+R4 <- 40
+# parameters from Daw 2006
+decay_parameter <- 0.9836
+decay_center <- 50
+observation_sd <- 4
+difussion_sd <- 2.8
+
+# simulate rewards for the 4 bandits
+set.seed(2021)
+P1<-RW(total_trials, R1, decay_parameter, decay_center, observation_sd, difussion_sd)
+P2<-RW(total_trials, R2, decay_parameter, decay_center, observation_sd, difussion_sd)
+P3<-RW(total_trials, R3, decay_parameter, decay_center, observation_sd, difussion_sd)
+P4<-RW(total_trials, R4, decay_parameter, decay_center, observation_sd, difussion_sd)
+
+# plot reward schedule
+plot(P1,  ylim=c(0,100),
+     xlab="t",ylab="reward", 
+     typ='l', col="red")
+lines(P2, col="blue")
+lines(P3, col="orange")
+lines(P4, col="green")
+
+reward_schedule <- cbind(P1,P2,P3,P4)
+```
+
+Now, we can simulate an agent's choices.
+
+We'll assume an ideal agent following the winning model in [Chakroun et al. 2020](https://elifesciences.org/articles/51260), where expected reward is updated according to a Bayesian learner that implements a Kalman filter, and the choice rule is softmax + exploration bonus (directed exploration) + perseveration bonus.
+
+```{r choice_sim}
+# parameter values (based on posterior estimates in Chakroun's winning model)
+#### tweak these to change agent behavior
+beta = 0.3
+phi = 1.5
+persev = 4
+
+# choice function
+soft_max <- function(b, val, eb, pb){
+  sumExp <- exp(b * (val[1] + eb[1] +  pb[1])) + exp(b * (val[2] + eb[2] +  pb[2])) +
+    exp(b * (val[3] + eb[3] +  pb[3])) + exp(b * (val[4] + eb[4] +  pb[4]))
+  choiceProb1 <- exp(b * (val[1] + eb[1] +  pb[1]))/sumExp
+  choiceProb2 <- exp(b * (val[2] + eb[2] +  pb[2]))/sumExp
+  choiceProb3 <- exp(b * (val[3] + eb[3] +  pb[3]))/sumExp
+  choiceProb4 <- exp(b * (val[4] + eb[4] +  pb[4]))/sumExp
+  return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
+}
+
+# initialize choice, reward, expected value, and observation variance arrays
+choice <- rep(0,total_trials)
+reward <- rep(0,total_trials)
+v <- rep(50,4) # initial value at 50 points; 4 choices
+sigma <- rep(observation_sd, 4)
+
+# simulate choices for each trial
+for (t in 1:total_trials){
+  explo_bonus <- phi * sigma
+  persv_bonus <- rep(0,4)
+  
+  if(t>1){
+    # choice history of the prev trial
+    persv_bonus[choice[t-1]] <- persev
+  }
+  
+  # simulate choice on trial t based on softmax rule
+  choice[t] <- sample(4, size = 1, prob = soft_max(beta,v,explo_bonus,persv_bonus))
+  
+  # get reward from reward schedule based on simulated choice
+  reward[t] <- reward_schedule[t,choice[t]]
+  
+  # calculate prediction error
+  pe <- reward[t] - v[choice[t]]
+  
+  # Kalman gain
+  Kgain = sigma[choice[t]]^2 / (sigma[choice[t]]^2 + observation_sd^2)
+  
+  # expected value update
+  v[choice[t]]   = v[choice[t]] + Kgain * pe
+  
+  v = decay_parameter * v + (1-decay_parameter) * decay_center;  
+  
+  # update obseration variance for all bandits
+  for (j in 1:4) {
+      sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + observation_sd^2 );
+  }
+}
+```
+
+
+
