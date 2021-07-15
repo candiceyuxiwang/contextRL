@@ -34,14 +34,14 @@ RW <- function(N, x0, decay,theta, sd, diffusion_noise) {
 total_trials <- 150
 # initial values (can be changed!)
 R1 <- 80 
-R2 <- 75
+R2 <- 70
 R3 <- 40
-R4 <- 40
+R4 <- 30
 # parameters from Daw 2006
 decay_parameter <- 0.9836
 decay_center <- 50
 observation_sd <- 4
-difussion_sd <- 2.8
+diffusion_sd <- 2.8
 
 # simulate rewards for the 4 bandits
 set.seed(2021)
@@ -59,6 +59,7 @@ lines(P3, col="orange")
 lines(P4, col="green")
 
 reward_schedule <- cbind(P1,P2,P3,P4)
+# there's a reward value that's actually 101...
 ```
 
 Now, we can simulate an agent's choices.
@@ -86,6 +87,8 @@ soft_max <- function(b, val, eb, pb){
 # initialize choice, reward, expected value, and observation variance arrays
 choice <- rep(0,total_trials)
 reward <- rep(0,total_trials)
+pe <- rep(0,total_trials)
+Kgain <- rep(0,total_trials)
 v <- rep(50,4) # initial value at 50 points; 4 choices
 sigma <- rep(observation_sd, 4)
 
@@ -95,7 +98,7 @@ for (t in 1:total_trials){
   persv_bonus <- rep(0,4)
   
   if(t>1){
-    # choice history of the prev trial
+    # update perserveration bonus based on last trial's choice
     persv_bonus[choice[t-1]] <- persev
   }
   
@@ -106,19 +109,23 @@ for (t in 1:total_trials){
   reward[t] <- reward_schedule[t,choice[t]]
   
   # calculate prediction error
-  pe <- reward[t] - v[choice[t]]
+  pe[t] <- reward[t] - v[choice[t]]
   
   # Kalman gain
-  Kgain = sigma[choice[t]]^2 / (sigma[choice[t]]^2 + observation_sd^2)
+  Kgain[t] = sigma[choice[t]]^2 / (sigma[choice[t]]^2 + observation_sd^2)
+  
+  # posterior variance for the chosen option
+  sigma[choice[t]] = sqrt( (1 - Kgain[t]) * sigma[choice[t]]^2 )
   
   # expected value update
-  v[choice[t]]   = v[choice[t]] + Kgain * pe
+  v[choice[t]] = v[choice[t]] + Kgain[t] * pe[t]
   
+  # between-trial update based on gaussian random walk
   v = decay_parameter * v + (1-decay_parameter) * decay_center;  
   
   # update obseration variance for all bandits
   for (j in 1:4) {
-      sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + observation_sd^2 );
+      sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + diffusion_sd^2 );
   }
 }
 ```
