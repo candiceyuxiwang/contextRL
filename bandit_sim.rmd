@@ -45,10 +45,10 @@ diffusion_sd <- 2.8
 
 # simulate rewards for the 4 bandits
 set.seed(2021)
-P1<-RW(total_trials, R1, decay_parameter, decay_center, observation_sd, difussion_sd)
-P2<-RW(total_trials, R2, decay_parameter, decay_center, observation_sd, difussion_sd)
-P3<-RW(total_trials, R3, decay_parameter, decay_center, observation_sd, difussion_sd)
-P4<-RW(total_trials, R4, decay_parameter, decay_center, observation_sd, difussion_sd)
+P1<-RW(total_trials, R1, decay_parameter, decay_center, observation_sd, diffusion_sd)
+P2<-RW(total_trials, R2, decay_parameter, decay_center, observation_sd, diffusion_sd)
+P3<-RW(total_trials, R3, decay_parameter, decay_center, observation_sd, diffusion_sd)
+P4<-RW(total_trials, R4, decay_parameter, decay_center, observation_sd, diffusion_sd)
 
 # plot reward schedule
 plot(P1,  ylim=c(0,100),
@@ -84,6 +84,7 @@ soft_max <- function(b, val, eb, pb){
   return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
 }
 
+sim_subject <- function(beta, phi, perserv){
 # initialize choice, reward, expected value, and observation variance arrays
 choice <- rep(0,total_trials)
 reward <- rep(0,total_trials)
@@ -127,6 +128,8 @@ for (t in 1:total_trials){
   for (j in 1:4) {
       sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + diffusion_sd^2 );
   }
+}
+return(c(reward, choice))
 }
 ```
 
