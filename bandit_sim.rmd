@@ -67,12 +67,6 @@ Now, we can simulate an agent's choices.
 We'll assume an ideal agent following the winning model in [Chakroun et al. 2020](https://elifesciences.org/articles/51260), where expected reward is updated according to a Bayesian learner that implements a Kalman filter, and the choice rule is softmax + exploration bonus (directed exploration) + perseveration bonus.
 
 ```{r choice_sim}
-# parameter values (based on posterior estimates in Chakroun's winning model)
-#### tweak these to change agent behavior
-beta = 0.3
-phi = 1.5
-persev = 4
-
 # choice function
 soft_max <- function(b, val, eb, pb){
   sumExp <- exp(b * (val[1] + eb[1] +  pb[1])) + exp(b * (val[2] + eb[2] +  pb[2])) +
@@ -84,7 +78,7 @@ soft_max <- function(b, val, eb, pb){
   return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
 }
 
-sim_subject <- function(beta, phi, perserv){
+sim_subject <- function(beta, phi, persev){
 # initialize choice, reward, expected value, and observation variance arrays
 choice <- rep(0,total_trials)
 reward <- rep(0,total_trials)
@@ -129,9 +123,33 @@ for (t in 1:total_trials){
       sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + diffusion_sd^2 );
   }
 }
-return(c(reward, choice))
+return(as.data.frame(cbind(reward, choice)))
 }
 ```
 
+We can simulate a number of subjects using free parameters drawn from a normal distribution.
+
+```{r}
+Nsub <- 50
+
+# parameter values (based on posterior estimates in Chakroun's winning model)
+#### tweak these to change agent behavior
+betas = rnorm(Nsub, 0.3, 0.1)
+phis = rnorm(Nsub, 1.5, 0.1)
+persevs = rnorm(Nsub, 4, 0.1)
+
+# simuluate data for all subjects
+sim_data <- data.frame(matrix(ncol = 4, nrow = total_trials*Nsub))
+colnames(sim_data) <- c("subject","trialnum","choice","reward")
+for (s in 1:Nsub){
+  start_ind <- (s-1)*total_trials+1
+  end_ind <- s*total_trials
+  sub_sim <- sim_subject(betas[s],phis[s],persevs[s])
+  sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
+  sim_data$trialnum[start_ind:end_ind] <- 1:total_trials
+  sim_data$choice[start_ind:end_ind] <- sub_sim$choice
+  sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+}
+```
 
 
