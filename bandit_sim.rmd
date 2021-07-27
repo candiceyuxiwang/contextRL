@@ -152,4 +152,40 @@ for (s in 1:Nsub){
 }
 ```
 
+We can look at the percentage of optimal choices in simulated subject data:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+# check whether each choice was the optimal arm
+for (t in 1:nrow(sim_data)){
+  sim_data$optimal[t] <- which.max(reward_schedule[sim_data$trialnum[t],])==sim_data$choice[t]
+}
+
+binned_p_optimal <- sim_data %>%
+  mutate(trial_bin = case_when(
+    trialnum < 16 ~ 1,
+    trialnum < 31 ~ 2,
+    trialnum < 46 ~ 3,
+    trialnum < 61 ~ 4,
+    trialnum < 76 ~ 5,
+    trialnum < 91 ~ 6,
+    trialnum < 106 ~ 7,
+    trialnum < 120 ~ 8,
+    trialnum < 136 ~ 9,
+    TRUE ~ 10
+  )) %>%
+  group_by(subject, trial_bin) %>%
+  summarise(p_optimal = sum(optimal)/15)
+
+binned_p_optimal%>%
+  mutate(trial_bin = as.factor(trial_bin))%>%
+  ggplot(aes(x = trial_bin, y = p_optimal))+
+  geom_jitter(aes(color = trial_bin))
+```
+
+From the plot, it is clear that simulated subjects generally perform very well in stretches of trials where one option is clearly superior than others (e.g. trial bin #7). In contrast, when two or more options have similar reward values, the probability of choosing the optimal arm can be lower for some or all subjects. 
+
+Likelihood of exploratory choices in a given period of the task depend on the reward schedule
+
 
