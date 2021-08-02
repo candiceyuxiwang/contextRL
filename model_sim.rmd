@@ -1,0 +1,42 @@
+---
+title: "model_sim"
+author: "Candice Wang"
+date: "8/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## modeling a simulated restless 4-arm bandit task
+
+In bandit_sim.rmd, we simulated 50 subjects' choices on Daw et al., 2006's restless 4-arm bandit task. Like real subjects, each simulated subject was exposed to one of 3 reward schedule instantiations.
+
+We can compare computational models with different learning and choice rules to discern behavioral signatures of directed exploration, random exploration, exploitation, and perserveration.
+
+The first class of models use the classic delta rule (Sutton & Barto, 1998) as the learning rule, with a constant learning rate. the learning rule can be combined with 4 different choice rules (Chakroun et al., 2020).
+
+```{r}
+library(rstan)
+sim_data  <- list(
+             totalTrials = nrow(sim_data), 
+             nSubjects = max(sim_data$subject), 
+             subject = sim_data$subject, 
+             trialNum = sim_data$trialnum,
+             choices = sim_data$choice, 
+             rewards = sim_data$reward
+             ) 
+# fit to model 1 with delta learning rule and standard softmax choice rule
+sim_fit_delta_SM <- stan(
+  file = "delta_SM.stan",  # Stan program
+  data = sim_data,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+  )
+
+print(sim_fit_delta_SM, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma"))
+stan_hist(sim_fit_delta_SM, pars = c("beta_mu","beta_sigma","alpha_mu","alpha_sigma"))
+```
