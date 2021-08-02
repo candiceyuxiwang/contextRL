@@ -11,55 +11,79 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## simulating 4-arm bandit task
 
-First, we can simulate 4 bandits whose reward payoffs drift randomly across trials according to a decaying Gaussian random walk (following [Daw et al., 2006](https://pubmed.ncbi.nlm.nih.gov/16778890/) ).
-
-*Question*: not sure if this is the correct way to operationalize the reward schedule in the Daw study; I cannot find any code or the reward schedule from any paper using that task (according to [Kovach et al. 2012](https://www.jneurosci.org/content/32/25/8434), payoff varied according to a slowly drifting pseudorandom walk that's fixed across subjects, with added Gaussian noise that's different across subject.
+First, we can simulate 4 bandits whose reward payoffs drift randomly across trials according to a decaying Gaussian random walk (following [Daw et al., 2006](https://pubmed.ncbi.nlm.nih.gov/16778890/) ). We can use the same instantiations provided by David Mathar [Chakroun et al. 2020](https://elifesciences.org/articles/51260).
 
 ```{r reward_sim}
-# random walk function
-RW <- function(N, x0, decay,theta, sd, diffusion_noise) {
-  noise <- rnorm(n=N, mean=0, diffusion_noise)
-  mu <- array()
-  rewards <- array()
-  mu[1] <- x0
-  rewards[1] <- rnorm(1, x0, sd)
-  for(t in 2:N){
-    mu[t] <- mu[t-1]*decay + (1-decay) * theta + noise[t]
-    rewards[t] <- rnorm(1, mu[t], sd)
-  }
-  return(round(rewards))
-}
-
-### some variables
+# # random walk function
+# RW <- function(N, x0, decay,theta, sd, diffusion_noise) {
+#   noise <- rnorm(n=N, mean=0, diffusion_noise)
+#   mu <- array()
+#   rewards <- array()
+#   mu[1] <- x0
+#   rewards[1] <- rnorm(1, x0, sd)
+#   for(t in 2:N){
+#     mu[t] <- mu[t-1]*decay + (1-decay) * theta + noise[t]
+#     rewards[t] <- rnorm(1, mu[t], sd)
+#   }
+#   return(round(rewards))
+# }
+# 
+# ### some variables
 total_trials <- 150
-# initial values (can be changed!)
-R1 <- 80 
-R2 <- 70
-R3 <- 40
-R4 <- 30
+# # initial values (can be changed!)
+# R1 <- 80 
+# R2 <- 70
+# R3 <- 40
+# R4 <- 30
 # parameters from Daw 2006
 decay_parameter <- 0.9836
 decay_center <- 50
 observation_sd <- 4
 diffusion_sd <- 2.8
+# 
+# # simulate rewards for the 4 bandits
+# set.seed(2021)
+# P1<-RW(total_trials, R1, decay_parameter, decay_center, observation_sd, diffusion_sd)
+# P2<-RW(total_trials, R2, decay_parameter, decay_center, observation_sd, diffusion_sd)
+# P3<-RW(total_trials, R3, decay_parameter, decay_center, observation_sd, diffusion_sd)
+# P4<-RW(total_trials, R4, decay_parameter, decay_center, observation_sd, diffusion_sd)
+# 
+# # plot reward schedule
+# plot(P1,  ylim=c(0,100),
+#      xlab="t",ylab="reward", 
+#      typ='l', col="red")
+# lines(P2, col="blue")
+# lines(P3, col="orange")
+# lines(P4, col="green")
+# 
+# reward_schedule <- cbind(P1,P2,P3,P4)
+# # there's a reward value that's actually 101...
 
-# simulate rewards for the 4 bandits
-set.seed(2021)
-P1<-RW(total_trials, R1, decay_parameter, decay_center, observation_sd, diffusion_sd)
-P2<-RW(total_trials, R2, decay_parameter, decay_center, observation_sd, diffusion_sd)
-P3<-RW(total_trials, R3, decay_parameter, decay_center, observation_sd, diffusion_sd)
-P4<-RW(total_trials, R4, decay_parameter, decay_center, observation_sd, diffusion_sd)
+# load the values
+payoffs_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/payoffs1.txt", header = F)
+payoffs_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/payoffs2.txt", header = F)
+payoffs_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/payoffs3.txt", header = F)
+noise_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/noise1.txt", header = F)
+noise_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/noise2.txt", header = F)
+noise_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/noise3.txt", header = F)
+# instantiations = payoffs + random noise
+instantiation_1 <- cbind(payoffs_1$V1 + noise_1, payoffs_1$V2 + noise_1, payoffs_1$V3 + noise_1, payoffs_1$V4 + noise_1)
+colnames(instantiation_1) <- c("V1","V2","V3","V4")
+instantiation_2 <- cbind(payoffs_2$V1 + noise_2, payoffs_2$V2 + noise_2, payoffs_2$V3 + noise_2, payoffs_2$V4 + noise_2)
+colnames(instantiation_2) <- c("V1","V2","V3","V4")
+instantiation_3 <- cbind(payoffs_3$V1 + noise_3, payoffs_3$V2 + noise_3, payoffs_3$V3 + noise_3, payoffs_3$V4 + noise_3)
+colnames(instantiation_3) <- c("V1","V2","V3","V4")
 
-# plot reward schedule
-plot(P1,  ylim=c(0,100),
+reward_schedule <- instantiation_1[1:300,]
+
+# plot reward schedule from the first instantiation
+plot(reward_schedule$V1, ylim=c(0,100),
      xlab="t",ylab="reward", 
      typ='l', col="red")
-lines(P2, col="blue")
-lines(P3, col="orange")
-lines(P4, col="green")
-
-reward_schedule <- cbind(P1,P2,P3,P4)
-# there's a reward value that's actually 101...
+lines(reward_schedule$V2, col="blue")
+lines(reward_schedule$V3, col="orange")
+lines(reward_schedule$V4, col="green")
+# this reproduces figure 1 from Chakroun et al. 2020
 ```
 
 Now, we can simulate an agent's choices.
@@ -79,7 +103,12 @@ soft_max <- function(b, val, eb, pb){
 }
 
 sim_subject <- function(beta, phi, persev){
+# randomly select 1 reward schedule instantiation
+instantiation_num <- sample(1:3,1)
+reward_schedule <- get(paste("instantiation_",instantiation_num,sep = ""))[1:total_trials,]
+  
 # initialize choice, reward, expected value, and observation variance arrays
+instantiation <- rep(instantiation_num, total_trials)
 choice <- rep(0,total_trials)
 reward <- rep(0,total_trials)
 pe <- rep(0,total_trials)
@@ -123,7 +152,7 @@ for (t in 1:total_trials){
       sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + diffusion_sd^2 );
   }
 }
-return(as.data.frame(cbind(reward, choice)))
+return(as.data.frame(cbind(reward, choice,instantiation)))
 }
 ```
 
@@ -139,8 +168,8 @@ phis = rnorm(Nsub, 1.5, 0.1)
 persevs = rnorm(Nsub, 4, 0.1)
 
 # simuluate data for all subjects
-sim_data <- data.frame(matrix(ncol = 4, nrow = total_trials*Nsub))
-colnames(sim_data) <- c("subject","trialnum","choice","reward")
+sim_data <- data.frame(matrix(ncol = 5, nrow = total_trials*Nsub))
+colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation")
 for (s in 1:Nsub){
   start_ind <- (s-1)*total_trials+1
   end_ind <- s*total_trials
@@ -149,6 +178,7 @@ for (s in 1:Nsub){
   sim_data$trialnum[start_ind:end_ind] <- 1:total_trials
   sim_data$choice[start_ind:end_ind] <- sub_sim$choice
   sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+  sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
 }
 ```
 
@@ -159,7 +189,8 @@ library(dplyr)
 library(ggplot2)
 # check whether each choice was the optimal arm
 for (t in 1:nrow(sim_data)){
-  sim_data$optimal[t] <- which.max(reward_schedule[sim_data$trialnum[t],])==sim_data$choice[t]
+  rewards <- get(paste("instantiation_",sim_data$instantiation[t],sep = ""))[sim_data$trialnum[t],]
+  sim_data$optimal[t] <- which.max(rewards)==sim_data$choice[t]
 }
 
 binned_p_optimal <- sim_data %>%
@@ -181,11 +212,10 @@ binned_p_optimal <- sim_data %>%
 binned_p_optimal%>%
   mutate(trial_bin = as.factor(trial_bin))%>%
   ggplot(aes(x = trial_bin, y = p_optimal))+
+  geom_boxplot()+
   geom_jitter(aes(color = trial_bin))
 ```
 
-From the plot, it is clear that simulated subjects generally perform very well in stretches of trials where one option is clearly superior than others (e.g. trial bin #7). In contrast, when two or more options have similar reward values, the probability of choosing the optimal arm can be lower for some or all subjects. 
 
-Likelihood of exploratory choices in a given period of the task depend on the reward schedule
 
 
