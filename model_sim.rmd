@@ -17,9 +17,11 @@ We can compare computational models with different learning and choice rules to 
 
 The first class of models use the classic delta rule (Sutton & Barto, 1998) as the learning rule, with a constant learning rate. the learning rule can be combined with 4 different choice rules (Chakroun et al., 2020).
 
+The first choice rule is a standard softmax, with 1 free parameter beta (inverse temperature) modeling inherent choice randomness.
+
 ```{r}
 library(rstan)
-sim_data  <- list(
+sim_data_list  <- list(
              totalTrials = nrow(sim_data), 
              nSubjects = max(sim_data$subject), 
              subject = sim_data$subject, 
@@ -30,7 +32,7 @@ sim_data  <- list(
 # fit to model 1 with delta learning rule and standard softmax choice rule
 sim_fit_delta_SM <- stan(
   file = "delta_SM.stan",  # Stan program
-  data = sim_data,    # named list of data
+  data = sim_data_list,    # named list of data
   chains = 4,             # number of Markov chains
   warmup = 200,          # number of warmup iterations per chain
   iter = 400,            # total number of iterations per chain
@@ -39,4 +41,53 @@ sim_fit_delta_SM <- stan(
 
 print(sim_fit_delta_SM, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma"))
 stan_hist(sim_fit_delta_SM, pars = c("beta_mu","beta_sigma","alpha_mu","alpha_sigma"))
+
+# LOOCV
+library(loo)
 ```
+
+Beta is well below 0, meaning that choices rely on estimated value differences between arms to a small degree. Alpha (learning rate) is high, suggesting that a large proportion of the prediction error is used to update estimated values.
+
+The second choice rule includes an additional exploration bonus term, which scales with the estimated uncertainty of the chosen bandit (directed exploration). In delta rule model, this exploration bonus for a bandit scales linearly with the number of trials since it was last chosen (cf. Chakroun et al., 2020; Speekenbrink & Konstantinidis, 2015). 
+
+```{r}
+# compute exploration bonus
+exploration_bonus <- matrix(nrow = nrow(sim_data), ncol = 4)
+for (t in 1:(nrow(sim_data)-1)){
+  if(sim_data$trialnum[t]==1){
+    exploration_bonus[t,] <- 0
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+    if(length(which(sim_data$choice[(1+(sim_data$subject[t]-1)*150):t] %in% i))==0){
+      exploration_bonus[t+1,i] <- t - (sim_data$subject[t]-1)*150 # hasn't been chosen before
+    }else{
+      exploration_bonus[t+1,i] <- t - (max(which(sim_data$choice[(1+(sim_data$subject[t]-1)*150):t] %in% i)) + (sim_data$subject[t]-1)*150)
+    }
+  }
+}
+
+# make new data list with exploration bonus
+sim_data_list_1  <- list(
+             totalTrials = nrow(sim_data), 
+             nSubjects = max(sim_data$subject), 
+             subject = sim_data$subject, 
+             trialNum = sim_data$trialnum,
+             choices = sim_data$choice, 
+             rewards = sim_data$reward,
+             eb = exploration_bonus
+             ) 
+
+# fit
+sim_fit_delta_SME <- stan(
+  file = "delta_SME.stan",  # Stan program
+  data = sim_data_list_1,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+  )
+print(sim_fit_delta_SME, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma"))
+stan_hist(sim_fit_delta_SME, pars = c("beta_mu","beta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma"))
+```
+
