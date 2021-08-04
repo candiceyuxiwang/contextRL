@@ -44,6 +44,7 @@ stan_hist(sim_fit_delta_SM, pars = c("beta_mu","beta_sigma","alpha_mu","alpha_si
 
 # LOOCV
 library(loo)
+loo_delta_SM <- loo(sim_fit_delta_SM)
 ```
 
 Beta is well below 0, meaning that choices rely on estimated value differences between arms to a small degree. Alpha (learning rate) is high, suggesting that a large proportion of the prediction error is used to update estimated values.
@@ -89,5 +90,10 @@ sim_fit_delta_SME <- stan(
   )
 print(sim_fit_delta_SME, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma"))
 stan_hist(sim_fit_delta_SME, pars = c("beta_mu","beta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma"))
+
+# LOOCV 
+loo_delta_SME <- loo(sim_fit_delta_SME)
+loo_compare(loo_delta_SM, loo_delta_SME)
 ```
 
+The second model with directed exploration bonus term fit the simulated data better.

@@ -76,6 +76,7 @@ generated quantities{
   vector[nSubjects] alpha;
   real alpha_mu;
   real alpha_sigma;
+  vector[totalTrials] log_lik; // log likelihood for model comparison
 
   for (s in 1:nSubjects){
     alpha[s] = inv_logit(eta[s]);
@@ -83,6 +84,12 @@ generated quantities{
 
   alpha_mu = mean(alpha);
   alpha_sigma = sd(alpha);
+  
+  for (t in 1:totalTrials){
+    if (choices[t] != 0){ // adding this to avoid issues with missed trials
+      log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * Q[t]);
+    }
+  }
   
 }
 
