@@ -122,7 +122,7 @@ View(learn_data)
 ```{r}
 # % best door as function of time on task
 bin_size = 15
-learn_data %>%
+learn_data <- learn_data %>%
   mutate(trial_bin = case_when(
     learn_trial_n < bin_size + 1 ~ 1,
     learn_trial_n < bin_size*2 + 1 ~ 2,
@@ -134,7 +134,8 @@ learn_data %>%
     learn_trial_n < bin_size*8 + 1 ~ 8,
     learn_trial_n < bin_size*9 + 1 ~ 9,
     TRUE ~ 10
-  )) %>%
+  )) 
+learn_data %>%
   group_by(ID, trial_bin) %>%
   summarise(p_optimal = sum(best_door_chosen)/bin_size)%>%
   mutate(trial_bin = as.factor(trial_bin))%>%
@@ -196,7 +197,7 @@ stan_hist(pilot_fit_delta_SMEPR, pars = c("beta","alpha","phi","persev","gamma")
 
 ```
 
-Model derived expected values, directed exploration bonus (uncertainty), choice probabilities for the 4 doors:
+Model derived expected values and directed exploration bonus (uncertainty) for the 4 doors:
 
 ```{r}
 fit_summary <- as.data.frame(t(summary(pilot_fit_delta_SMEPR)$summary))
@@ -216,17 +217,65 @@ plot(Q$V1, ylim=c(0,100),
 lines(Q$V2, col=door_key[2])
 lines(Q$V3, col=door_key[3])
 lines(Q$V4, col=door_key[4])
-points(reward_schedule$V1, col=door_key[1])
-points(reward_schedule$V2, col=door_key[2])
-points(reward_schedule$V3, col=door_key[3])
-points(reward_schedule$V4, col=door_key[4])
+points(reward_schedule$V1, col=door_key[2],pch=20)
+points(reward_schedule$V2, col=door_key[1],pch=20)
+points(reward_schedule$V3, col=door_key[4],pch=20)
+points(reward_schedule$V4, col=door_key[3],pch=20)
+
+# directed exploration bonus
+plot(exploration_bonus[,1], ylim=c(0,30),
+     xlab="trial",ylab="directed exploration bonus", 
+     typ='l', col=door_key[1])
+lines(exploration_bonus[,2], col=door_key[2])
+lines(exploration_bonus[,3], col=door_key[3])
+lines(exploration_bonus[,4], col=door_key[4])
 ```
 
 Trial-by-trial reward prediction errors and total uncertainty (summed across all choices):
 
 ```{r}
+# reward prediction errors
+RPE <- Q %>%
+  cbind(learn_data$learn_trial_n, learn_data$reward, learn_data$chosen_door_num)
+for (i in 1:nrow(RPE)){
+  RPE$RPE[i] <- RPE$`learn_data$reward`[i] - RPE[i,RPE$`learn_data$chosen_door_num`[i]]
+}
+plot(RPE$RPE, xlab="trial",ylab="reward prediction error", 
+     typ='l')
 
+# total uncertainty
+plot(rowSums(exploration_bonus), xlab="trial",ylab="total uncertainty (across all doors)", 
+     typ='l')
 ```
 
 We can also look at choices that can be classified as exploitative (maximum expected value), directed exploratoration (maximum uncertainty), or random exploration.
+
+```{r}
+# exploitative choices
+for (i in 1:nrow(Q)){
+  Q$exploit_door_num[i] <- which.max(Q[i,])
+}
+
+# directed explore choices
+exploration_bonus <- as.data.frame(exploration_bonus)
+for (i in 1:nrow(exploration_bonus)){
+  exploration_bonus$dir_explore_door_num[i] <- which.max(exploration_bonus[i,])
+}
+
+# choice classification
+learn_data %>%
+  cbind(Q$exploit_door_num, exploration_bonus$dir_explore_door_num) %>%
+  mutate(choice_type = case_when(
+    chosen_door_num == `Q$exploit_door_num` ~ "exploitation",
+    chosen_door_num == `exploration_bonus$dir_explore_door_num` ~ "directed_exploration",
+    TRUE ~ "random_exploration"
+  ))%>%
+  group_by(ID, trial_bin) %>%
+  count(choice_type) %>%
+  mutate(percent_choices = n/bin_size) %>%
+  mutate(trial_bin = as.factor(trial_bin)) %>%
+  ggplot(aes(x = trial_bin, y = percent_choices))+
+  geom_point(aes(color = choice_type))
+```
+
 
