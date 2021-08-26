@@ -1,0 +1,232 @@
+---
+title: "pilot_data_analyses"
+author: "Candice Wang"
+date: "8/25/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Setup}
+#import packages
+library(car)
+library(ggplot2)
+library(dplyr)
+library(lme4)
+```
+
+######################################
+Preproc functions: Run these BEFORE the wrapper cell at the bottom.
+######################################
+
+```{r Clean_Learn}
+clean_learn <- function(df){
+  #select learning trials and variables of interest
+  df_learn <- dplyr::select(df, participant, condition, date, OS, trials.thisTrialN, choice_click.clicked_name, reward, task_stim, catch_success, catch_resp.rt, blue_val, red_val, yellow_val, purple_val, noise)
+  
+  #drop empty rows
+  df_learn <- df_learn[!is.na(df_learn$reward),]
+  
+  #rename variables
+  colnames(df_learn) <- c("ID", "condition", "date", "OS", "learn_trial_n", "chosen_door", "reward", "task_stim", "catch_success", "catch_rt", "blue_val", "red_val", "yellow_val", "purple_val", "noise")
+  
+  #fill down condition variable
+  df_learn$condition <- df_learn$condition[1]
+  
+  #fix catch_success variable
+  df_learn$catch_success[is.na(df_learn$catch_rt) & is.na(df_learn$catch_fail_rt)] <- NA
+  df_learn$catch_fail <- NA
+  df_learn$catch_fail[!is.na(df_learn$catch_fail_rt)] <- 1
+  
+  #shift index to match base 1 in R
+  df_learn$learn_trial_n <- df_learn$learn_trial_n + 1
+  
+  #convert door choice into numeric variable
+  ### door numbers
+  door_key <- c("red","blue","purple","yellow")
+  df_learn <- df_learn %>%
+    mutate(chosen_door_num = case_when(
+      grepl(door_key[1],chosen_door) ~ 1,
+      grepl(door_key[2],chosen_door) ~ 2,
+      grepl(door_key[3],chosen_door) ~ 3,
+      grepl(door_key[4],chosen_door) ~ 4
+    ))
+  
+  #best door chosen?
+  for(t in 1:nrow(df_learn)){
+    door_vals <- c(df_learn[[paste(door_key[1],"_val",sep="")]][t], 
+                   df_learn[[paste(door_key[2],"_val",sep="")]][t],
+                   df_learn[[paste(door_key[3],"_val",sep="")]][t],
+                   df_learn[[paste(door_key[4],"_val",sep="")]][t])
+    df_learn$best_door_num[t] <- which.max(door_vals)
+    df_learn$best_door_chosen[t] <- df_learn$best_door_num[t] == df_learn$chosen_door_num[t]
+  }
+  
+  return(df_learn)
+}
+```
+
+######################################
+Preproc wrapper: Run this to apply the preproc functions to all files in the data folder
+######################################
+```{r Preproc_Wrapper}
+#get list of all files in data folder
+#s1_filelist <- list.files(path="C:/Users/cityi/Box/Projects/Context_RL/Data/S1", pattern="*.csv", full.names=T)
+#s2_filelist <- list.files(path="C:/Users/cityi/Box/Projects/Context_RL/Data/S2", pattern="*.csv", full.names=T)
+
+s1_filelist <- list.files(path="~/Downloads", pattern="*.csv", full.names=T)
+#initialize lists to hold each participant's cleaned data
+learn_data <- c()
+#test_data <- c()
+#initialize lists to hold each participant's summary scores
+ID_list <- c()
+#scene_rec_acc <- c()
+#val_error <- c()
+#scene_door_acc <- c()
+catch_success <- c()
+catch_fail <- c()
+#apply preprocessing pipeline to every file in the filelist
+for (i in 1:length(s1_filelist)){
+  df_s1 <- read.csv(s1_filelist[i], header = T)
+  #df_s2 <- read.csv(s2_filelist[i], header = T)
+  df_learn <- clean_learn(df_s1)
+  #df_test <- clean_test(df_s2, df_learn)
+  learn_data <- rbind(learn_data, df_learn)
+  #test_data <- rbind(test_data, df_test)
+  
+  ID_list <- c(ID_list, df_learn$ID[1])
+  #scene_rec_acc <- c(scene_rec_acc, mean(df_test$scene_rec_acc, na.rm = T))
+  #val_error <- c(val_error, mean(df_test$val_error, na.rm = T))
+  #scene_door_acc <- c(scene_door_acc, mean(df_test$scene_door_acc, na.rm = T))
+  catch_success <- c(catch_success, sum(df_learn$catch_success, na.rm = T))
+  catch_fail <- c(catch_fail, mean(df_learn$catch_fail, na.rm = T))
+}
+#convert and view combined and cleaned dataframes
+learn_data <- as.data.frame(learn_data)
+View(learn_data)
+#test_data <- as.data.frame(test_data)
+#View(test_data)
+#convert and view combined summary stats
+#sum_data <- as.data.frame(cbind(ID_list, scene_rec_acc, val_error, scene_door_acc, catch_success, catch_fail))
+#View(sum_data)
+#scale continuous variables of interest
+#test_data$learn_trial_n_c <- scale(as.numeric(test_data$learn_trial_n))
+#test_data$scene_val_c <- scale(as.numeric(test_data$scene_val))
+#test_data$val_error_c <- scale(as.numeric(test_data$val_error))
+```
+
+### model-free analysis of choice data
+
+```{r}
+# % best door as function of time on task
+bin_size = 15
+learn_data %>%
+  mutate(trial_bin = case_when(
+    learn_trial_n < bin_size + 1 ~ 1,
+    learn_trial_n < bin_size*2 + 1 ~ 2,
+    learn_trial_n < bin_size*3 + 1 ~ 3,
+    learn_trial_n < bin_size*4 + 1 ~ 4,
+    learn_trial_n < bin_size*5 + 1 ~ 5,
+    learn_trial_n < bin_size*6 + 1 ~ 6,
+    learn_trial_n < bin_size*7 + 1 ~ 7,
+    learn_trial_n < bin_size*8 + 1 ~ 8,
+    learn_trial_n < bin_size*9 + 1 ~ 9,
+    TRUE ~ 10
+  )) %>%
+  group_by(ID, trial_bin) %>%
+  summarise(p_optimal = sum(best_door_chosen)/bin_size)%>%
+  mutate(trial_bin = as.factor(trial_bin))%>%
+  ggplot(aes(x = trial_bin, y = p_optimal))+
+  #geom_boxplot()+
+  geom_point(aes(color = trial_bin))
+```
+
+### model-based analysis of choice data
+
+We can try fitting the model with directed exploration bonus, perserveration bonus, and random exploration bonus.
+
+```{r}
+learn_data$ID <- 1
+# compute exploration bonus for delta learning rule
+exploration_bonus <- matrix(nrow = nrow(learn_data), ncol = 4)
+for (t in 1:(nrow(learn_data)-1)){
+  if(learn_data$learn_trial_n[t]==1){
+    exploration_bonus[t,] <- 1
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+    if(length(which(learn_data$chosen_door_num[(1+(learn_data$ID[t]-1)*150):t] %in% i))==0){
+      exploration_bonus[t+1,i] <- t - (learn_data$ID[t]-1)*150 # hasn't been chosen before
+    }else{
+      exploration_bonus[t+1,i] <- t - (max(which(learn_data$chosen_door_num[(1+(learn_data$ID[t]-1)*150):t] %in% i)) + (learn_data$ID[t]-1)*150)
+    }
+  }
+}
+
+pilot_data_list  <- list(
+             totalTrials = nrow(learn_data), 
+             #nSubjects = length(unique(learn_data$ID)), 
+             #subject = learn_data$ID, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             eb = exploration_bonus
+             ) 
+
+library(rstan)
+pilot_fit_delta_SMEPR <- stan(
+  file = "delta_SMEPR_1sub.stan",  # Stan program
+  data = pilot_data_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+  )
+
+traceplot(pilot_fit_delta_SMEPR, pars = c("beta","alpha","phi","persev","gamma"))
+stan_hist(pilot_fit_delta_SMEPR, pars = c("beta","alpha","phi","persev","gamma"))
+
+```
+
+```{r}
+# model with Bayesian learning rule
+
+
+```
+
+Model derived expected values, directed exploration bonus (uncertainty), choice probabilities for the 4 doors:
+
+```{r}
+fit_summary <- as.data.frame(t(summary(pilot_fit_delta_SMEPR)$summary))
+
+# expected values
+Q <- fit_summary %>%
+  select(-c(alpha,beta,phi,persev,gamma,lp__)) %>%
+  slice(1) %>%
+  as.matrix() %>%
+  matrix(nrow = 4, ncol = 150) %>%
+  t() %>%
+  as.data.frame(row.names = T)
+
+plot(Q$V1, ylim=c(0,100),
+     xlab="trial",ylab="expected reward", 
+     typ='l', col=door_key[1])
+lines(Q$V2, col=door_key[2])
+lines(Q$V3, col=door_key[3])
+lines(Q$V4, col=door_key[4])
+points(reward_schedule$V1, col=door_key[1])
+points(reward_schedule$V2, col=door_key[2])
+points(reward_schedule$V3, col=door_key[3])
+points(reward_schedule$V4, col=door_key[4])
+```
+
+Trial-by-trial reward prediction errors and total uncertainty (summed across all choices):
+
+```{r}
+
+```
+
+We can also look at choices that can be classified as exploitative (maximum expected value), directed exploratoration (maximum uncertainty), or random exploration.
+
