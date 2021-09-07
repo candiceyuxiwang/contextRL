@@ -22,7 +22,7 @@ data {
 parameters {
   real eta_mu; // hyperparameter for the mean of eta (needed for alphas)
   real<lower=0> eta_sigma; // hyperparameter for the standard deviation of eta (needed for alphas)
-  real beta_mu; // hyperparameter for the mean of the distribution of beta parameters
+  real<lower=0> beta_mu; // hyperparameter for the mean of the distribution of beta parameters
   real<lower=0> beta_sigma; // hyperparameter for the standard deviation of the distribution of beta parameters
   real phi_mu; // hyperparameter for the mean of phi (directed exploration bonus)
   real<lower=0> phi_sigma; // hyperparameter for the standard deviation of distribution of phi parameters
@@ -77,15 +77,15 @@ transformed parameters {
 
 model {
   eta_mu ~ normal(0,5); 
-  eta_sigma ~ cauchy(0,1); 
+  eta_sigma ~ normal(0,1); 
   beta_mu ~ normal(0,5); 
-  beta_sigma ~ cauchy(0,1); 
+  beta_sigma ~ normal(0,1); 
   phi_mu ~ normal(0,1);
-  phi_sigma ~ cauchy(0,1);
+  phi_sigma ~ normal(0,1);
   persev_mu ~ normal(0,1);
-  persev_sigma ~ cauchy(0,1);
+  persev_sigma ~ normal(0,1);
   gamma_mu ~ normal(0,1);
-  gamma_sigma ~ cauchy(0,1);
+  gamma_sigma ~ normal(0,1);
   
   beta_raw ~ normal(0,1);
   eta_raw ~ normal(0,1);

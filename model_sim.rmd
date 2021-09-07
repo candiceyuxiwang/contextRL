@@ -140,3 +140,18 @@ loo_compare(loo_delta_SME, loo_delta_SMEP, loo_delta_SMEPR)
 ```
 
 Here, the posterior for random exploration bonus hyperparameter is above 0, indicating that there's no strong evidence for random exploration bonus (not surprising given that the simulated data did not have a random exploration bonus). This model does not have significantly higher predictive power than the two previous models.
+
+```{r}
+# Bayesian model
+sim_fit_Bayes_SMEP <- stan(
+  file = "Bayes_SMEP.stan",  # Stan program
+  data = sim_data_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+  )
+
+traceplot(sim_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+
+```
