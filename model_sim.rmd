@@ -153,5 +153,9 @@ sim_fit_Bayes_SMEP <- stan(
   )
 
 traceplot(sim_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
-
+print(sim_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+stan_hist(sim_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
 ```
+
+The Bayes SMEP model, which is the groud-truth model for the simulated data that adjusts learning rate with a kalman filter and has perserveration and directed exploration bonuses, was able to recover the parameters reasonably. 
+
