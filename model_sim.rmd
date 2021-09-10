@@ -159,3 +159,31 @@ stan_hist(sim_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigm
 
 The Bayes SMEP model, which is the groud-truth model for the simulated data that adjusts learning rate with a kalman filter and has perserveration and directed exploration bonuses, was able to recover the parameters reasonably. 
 
+Now, we can try fitting the data again using only the first 50 trials to see if it would work with fewer data points.
+```{r}
+# first 50 trials only
+sim_data_short <- filter(sim_data, trialnum <=50)
+
+sim_data_short_list  <- list(
+             totalTrials = nrow(sim_data_short), 
+             nSubjects = max(sim_data_short$subject), 
+             subject = sim_data_short$subject, 
+             trialNum = sim_data_short$trialnum,
+             choices = sim_data_short$choice, 
+             rewards = sim_data_short$reward
+             ) 
+
+sim_short_fit_Bayes_SMEP <- stan(
+  file = "Bayes_SMEP.stan",  # Stan program
+  data = sim_data_short_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+  )
+traceplot(sim_short_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+print(sim_short_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+stan_hist(sim_short_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+```
+
+
