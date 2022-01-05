@@ -224,7 +224,7 @@ pilot_fit_Bayes_SMEP <- stan(
   )
 
 traceplot(pilot_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
-
+print(pilot_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
 ```
 
 ```{r}
