@@ -1,0 +1,177 @@
+---
+title: "Prolific_data_analysis.rmd"
+author: "Candice Wang"
+date: "1/5/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### read in data
+
+```{r}
+library(dplyr)
+library(ggplot2)
+learn_data <- read.csv("/Volumes/main2/studies/Context_RL/Data/context_RL_learn.csv")
+
+#convert door choice into numeric variable
+### door numbers
+door_key <- c("red","blue","purple","yellow")
+learn_data <- learn_data %>%
+    mutate(chosen_door_num = case_when(
+      grepl(door_key[1],chosen_door) ~ 1,
+      grepl(door_key[2],chosen_door) ~ 2,
+      grepl(door_key[3],chosen_door) ~ 3,
+      grepl(door_key[4],chosen_door) ~ 4
+    ))
+learn_data$ID_num <- as.numeric(as.factor(learn_data$ID))
+```
+
+### % optimal choice as function of time on task
+
+```{r}
+bin_size = 10
+learn_data %>%
+  mutate(trial_bin = case_when(
+    learn_trial_n < bin_size + 1 ~ 1,
+    learn_trial_n < bin_size*2 + 1 ~ 2,
+    learn_trial_n < bin_size*3 + 1 ~ 3,
+    learn_trial_n < bin_size*4 + 1 ~ 4,
+    learn_trial_n < bin_size*5 + 1 ~ 5,
+    learn_trial_n < bin_size*6 + 1 ~ 6,
+    learn_trial_n < bin_size*7 + 1 ~ 7,
+    learn_trial_n < bin_size*8 + 1 ~ 8,
+    learn_trial_n < bin_size*9 + 1 ~ 9,
+    TRUE ~ 10
+  )) %>%
+  group_by(ID, trial_bin, condition) %>%
+  summarise(p_optimal = sum(optimal_choice)/bin_size)%>%
+  mutate(trial_bin = as.factor(trial_bin))%>%
+  ggplot(aes(x = trial_bin, y = p_optimal))+
+  geom_boxplot(aes(color = condition))
+  
+```
+
+## model-based analysis of choice data
+
+We can try fitting the model with directed exploration bonus, perserveration bonus, and random exploration bonus.
+
+On each trial, the expected reward is updated using a delta learning rule.
+
+```{r}
+library(rstan)
+rstan_options(javascript=FALSE)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+```{r}
+# compute exploration bonus for delta learning rule
+exploration_bonus <- matrix(nrow = nrow(learn_data), ncol = 4)
+for (t in 1:(nrow(learn_data)-1)){
+  if(learn_data$learn_trial_n[t]==1){
+    exploration_bonus[t,] <- 1
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+      if(length(which(learn_data$chosen_door_num[(1+(learn_data$ID_num[t]-1)*100):t] %in% i))==0){
+        exploration_bonus[t+1,i] <- t - (learn_data$ID_num[t]-1)*100 # hasn't been chosen before
+      }else{
+        exploration_bonus[t+1,i] <- t - (max(which(learn_data$chosen_door_num[(1+(learn_data$ID_num[t]-1)*100):t] %in% i)) + (learn_data$ID_num[t]-1)*100)
+      }
+  }
+}
+
+delta_data_list  <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             eb = exploration_bonus
+             ) 
+
+# delta learning rule with softmax choice rule, directed exploration, and perserveration
+### this one has some sampling issues
+fit_delta_SMEP <- stan(
+  file = "delta_SMEP.stan",  # Stan program
+  data = delta_data_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 100,          # number of warmup iterations per chain
+  iter = 200,            # total number of iterations per chain
+  cores = 4
+  )
+traceplot(fit_delta_SMEP, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+print(fit_delta_SMEP, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+
+# delta learning rule with softmax choice rule, directed exploration, random exploration, and perserveration
+fit_delta_SMEPR <- stan(
+  file = "delta_SMEPR.stan",  # Stan program
+  data = delta_data_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 100,          # number of warmup iterations per chain
+  iter = 200,            # total number of iterations per chain
+  cores = 4
+  )
+
+traceplot(fit_delta_SMEPR, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","gamma_mu","gamma_sigma"))
+
+print(fit_delta_SMEPR, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","gamma_mu","gamma_sigma"))
+stan_hist(fit_delta_SMEPR, pars = c("beta_mu","alpha_mu","phi_mu","persev_mu","gamma_mu"))
+```
+
+We can also use a Bayesian learning rule where the learning rate depends on the uncertainty of each bandit's value. 
+
+```{r}
+bayes_data_list <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward
+)
+# Bayes_SMEP, with directed exploration and perserveration bonus, is the best fitting model from Chakroun et al. 2020
+fit_Bayes_SMEP <- stan(
+  file = "Bayes_SMEP.stan",  # Stan program
+  data = bayes_data_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 100,          # number of warmup iterations per chain
+  iter = 200,            # total number of iterations per chain
+  cores = 4
+  )
+## this doesn't work yet
+```
+
+### do the two groups differ in exploration and exploitation during learning?
+
+We expect that participants in the interrogative condition would have greater directed exploration compared to participants in the imperative condition, while the other parameters would not necessarily differ. We can model them as two separate populations and estimate the *difference* in directed exploration, random exploration, and perserveration between the two groups.
+
+```{r}
+library(cmdstanr)
+Bayes_SMEP_mod <- cmdstan_model("Bayes_SMEP_cond.stan")
+# new data list with condition information
+bayes_data_list_1 <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))
+)
+
+# running MCMC
+fit_Bayes_SMEP <- Bayes_SMEP_mod$sample(
+  data = bayes_data_list_1, 
+  chains = 2, 
+  parallel_chains = 2,
+  iter_warmup = 100,          # number of warmup iterations per chain
+  iter_sampling = 100
+)
+fit_Bayes_SMEP$print(c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+fit_Bayes_SMEP$print(c("beta_diff","phi_diff","perserv_diff"))
+```
