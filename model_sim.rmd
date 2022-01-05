@@ -186,4 +186,33 @@ print(sim_short_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_si
 stan_hist(sim_short_fit_Bayes_SMEP, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
 ```
 
+01/05/2022 
+We can simulate two conditions, imperative information seeking and interrogative information seeking, which may lead to different propensities in directed exploration (making choices to resolve uncertainty). We can now fit the two-condition version of the Bayes SMEP model to the simulated data.
+
+```{r}
+sim_data_cond_list  <- list(
+             totalTrials = nrow(sim_data), 
+             nSubjects = max(sim_data$subject), 
+             subject = sim_data$subject, 
+             trialNum = sim_data$trialnum,
+             choices = sim_data$choice, 
+             rewards = sim_data$reward,
+             condition = sim_cond
+             ) 
+
+library(cmdstanr)
+Bayes_SMEP_cond_mod <- cmdstan_model("Bayes_SMEP_cond.stan")
+
+# MCMC
+sim_Bayes_SMEP <- Bayes_SMEP_cond_mod$sample(
+  data = sim_data_cond_list, 
+  chains = 2, 
+  parallel_chains = 2,
+  iter_warmup = 100,          # number of warmup iterations per chain
+  iter_sampling = 100
+)
+sim_Bayes_SMEP$print(c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+sim_Bayes_SMEP$print(c("beta_diff","phi_diff","perserv_diff"))
+```
+
 

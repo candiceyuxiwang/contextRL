@@ -60,12 +60,12 @@ diffusion_sd <- 2.8
 # # there's a reward value that's actually 101...
 
 # load the values
-payoffs_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/payoffs1.txt", header = F)
-payoffs_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/payoffs2.txt", header = F)
-payoffs_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/payoffs3.txt", header = F)
-noise_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/noise1.txt", header = F)
-noise_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/noise2.txt", header = F)
-noise_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_all/ChakrounMathar2020reward_instantiation/noise3.txt", header = F)
+payoffs_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/payoffs1.txt", header = F)
+payoffs_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/payoffs2.txt", header = F)
+payoffs_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/payoffs3.txt", header = F)
+noise_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/noise1.txt", header = F)
+noise_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/noise2.txt", header = F)
+noise_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/noise3.txt", header = F)
 # instantiations = payoffs + random noise
 instantiation_1 <- cbind(payoffs_1$V1 + noise_1, payoffs_1$V2 + noise_1, payoffs_1$V3 + noise_1, payoffs_1$V4 + noise_1)
 colnames(instantiation_1) <- c("V1","V2","V3","V4")
@@ -167,6 +167,10 @@ betas = rnorm(Nsub, 0.3, 0.1)
 phis = rnorm(Nsub, 1.5, 0.1)
 persevs = rnorm(Nsub, 4, 0.1)
 
+## two groups of subjects with different phi's (directed exploration parameter)
+phis = c(rnorm(Nsub/2, 1.5, 0.1), rnorm(Nsub/2, 1.0, 0.1))
+sim_cond <- c(rep(2, Nsub/2), rep(1, Nsub/2))
+
 # simuluate data for all subjects
 sim_data <- data.frame(matrix(ncol = 5, nrow = total_trials*Nsub))
 colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation")
@@ -180,6 +184,7 @@ for (s in 1:Nsub){
   sim_data$reward[start_ind:end_ind] <- sub_sim$reward
   sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
 }
+
 ```
 
 We can look at the percentage of optimal choices in simulated subject data:
