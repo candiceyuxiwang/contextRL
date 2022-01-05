@@ -21,7 +21,7 @@ data {
 parameters {
   real eta_mu; // hyperparameter for the mean of eta (needed for alphas)
   real<lower=0> eta_sigma; // hyperparameter for the standard deviation of eta (needed for alphas)
-  real beta_mu; // hyperparameter for the mean of the distribution of beta parameters
+  real<lower=0> beta_mu; // hyperparameter for the mean of the distribution of beta parameters
   real<lower=0> beta_sigma; // hyperparameter for the standard deviation of the distribution of beta parameters
   real phi_mu; // hyperparameter for the mean of phi (directed exploration bonus)
   real<lower=0> phi_sigma; // hyperparameter for the standard deviation of distribution of phi parameters
@@ -62,9 +62,9 @@ transformed parameters {
       for (arm in 1:4){
         Q[t][arm] = Q[t-1][arm]; // inherit previous value
       }
-      if (choices[t-1] != 0){ // if the previous trial was not a missed trial, update estimated reward and perserv bonus
+      //if (choices[t-1] != 0){ // if the previous trial was not a missed trial, update estimated reward and perserv bonus
        Q[t][choices[t-1]] = Q[t-1][choices[t-1]] + inv_logit(eta[subject[t]]) * (rewards[t-1] - Q[t-1][choices[t-1]]) + persev[subject[t]];
-      }
+      //}
     }
   }
 }
@@ -85,9 +85,9 @@ model {
   persev_raw ~ normal(0,1);
   
   for (t in 1:totalTrials){
-    if (choices[t] != 0){ // adding this to avoid issues with missed trials
+   // if (choices[t] != 0){ // adding this to avoid issues with missed trials
       choices[t] ~ categorical_logit(beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t])); // the probability of the choices on each trial given utilities and exploration bonus
-    }
+   // }
   }
 }
 
