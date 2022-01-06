@@ -106,16 +106,16 @@ transformed parameters {
 }
 
 model {
+  // using priors from the estimated posteriors from Chakroun et al. 2020
+  beta_mu ~ normal(0.2,1); 
+  beta_sigma ~ normal(0.1,0.1); 
+  phi_mu ~ normal(1,0.1);
+  phi_sigma ~ normal(0.7,0.1);
+  persev_mu ~ normal(5,1);
+  persev_sigma ~ normal(0.1,0.2);
   
-  beta_mu ~ normal(0,1); 
-  beta_sigma ~ normal(0,1); 
-  phi_mu ~ normal(0,1);
-  phi_sigma ~ normal(0,1);
-  persev_mu ~ normal(0,1);
-  persev_sigma ~ normal(0,1);
-  
-  beta_raw ~ normal(0,1);
-  phi_raw ~ normal(0,1);
+  beta_raw ~ normal(0,0.1);
+  phi_raw ~ normal(0,0.1);
   persev_raw ~ normal(0,1);
   
   
