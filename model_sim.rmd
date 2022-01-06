@@ -212,7 +212,14 @@ sim_fit_Bayes_SMEP_cond <- stan(
 traceplot(sim_fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
 
 print(sim_fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma", "beta_diff","phi_diff","persev_diff"))
+
+# parameter recovery
+library(bayesplot)
+draws <- as.matrix(sim_fit_Bayes_SMEP_cond)[, 1:9]
+true <- c(0.3, 0.3, 0.1, 1.0, 1.5, 0.1, 4, 4, 0.1)
+mcmc_recover_intervals(draws, true, batch = 1:ncol(draws))
+mcmc_recover_scatter(draws, true)
 ```
 
-The two-condition Bayes_SMEP model was able to recover the parameters for simulated data.
+The two-condition Bayes_SMEP model was able to recover the parameters for simulated data reasonably well.
 
