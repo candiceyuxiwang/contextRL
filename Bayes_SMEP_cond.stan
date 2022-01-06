@@ -37,7 +37,7 @@ transformed data {
 
 // parameters accepted by the model
 parameters {
-  real beta_mu[2]; // hyperparameter for the mean of the distribution of beta parameters
+  real<lower=0> beta_mu[2]; // hyperparameter for the mean of the distribution of beta parameters
   real<lower=0> beta_sigma; // hyperparameter for the standard deviation of the distribution of beta parameters
   real phi_mu[2]; // hyperparameter for the mean of phi (directed exploration bonus)
   real<lower=0> phi_sigma; // hyperparameter for the standard deviation of distribution of phi parameters
@@ -59,12 +59,11 @@ transformed parameters {
   vector[4] v[totalTrials];   // value (mu)
   vector<lower=0>[4] sig[totalTrials]; // sigma
   
-  
   // actual beta, phi, and persev parameters, determined by mu and sigma hyperparameters
   vector[nSubjects] beta;
   vector[nSubjects] phi;
   vector[nSubjects] persev;
-
+ 
   for (s in 1:nSubjects){
     beta[s] = beta_mu[condition[s]] + beta_sigma * beta_raw[s];
     phi[s] = phi_mu[condition[s]] + phi_sigma * phi_raw[s];
@@ -140,10 +139,10 @@ generated quantities{
  // vector[totalTrials] log_lik; // log likelihood for model comparison
 //  vector[4] pb;
   //calculate difference between conditions
-  real beta_diff; 
+  real beta_diff;  // difference between beta_mu[1] (imperative) and beta_mu[2] (interrogative)
   real phi_diff; // directed exploration
-  real perserv_diff;
-  
+  real persev_diff;
+
   // for (t in 1:totalTrials){
   //     pb = rep_vector(0.0, 4);
   //     if (trialNum[t]>1) {
@@ -151,8 +150,9 @@ generated quantities{
   //     }
   //     log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * (v[t] + eb[t] + pb));
   // }
-  
+
   beta_diff = beta_mu[1] - beta_mu[2];
   phi_diff = phi_mu[1] - phi_mu[2];
-  perserv_diff = persev_mu[1] - persev_mu[2];
+  persev_diff = persev_mu[1] - persev_mu[2];
 }
+

@@ -200,19 +200,19 @@ sim_data_cond_list  <- list(
              condition = sim_cond
              ) 
 
-library(cmdstanr)
-Bayes_SMEP_cond_mod <- cmdstan_model("Bayes_SMEP_cond.stan")
+sim_fit_Bayes_SMEP_cond <- stan(
+  file = "Bayes_SMEP_cond.stan",  # Stan program
+  data = sim_data_cond_list,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 100,          # number of warmup iterations per chain
+  iter = 200,            # total number of iterations per chain
+  cores = 4
+  )
 
-# MCMC
-sim_Bayes_SMEP <- Bayes_SMEP_cond_mod$sample(
-  data = sim_data_cond_list, 
-  chains = 2, 
-  parallel_chains = 2,
-  iter_warmup = 100,          # number of warmup iterations per chain
-  iter_sampling = 100
-)
-sim_Bayes_SMEP$print(c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
-sim_Bayes_SMEP$print(c("beta_diff","phi_diff","perserv_diff"))
+traceplot(sim_fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
+
+print(sim_fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma", "beta_diff","phi_diff","persev_diff"))
 ```
 
+The two-condition Bayes_SMEP model was able to recover the parameters for simulated data.
 
