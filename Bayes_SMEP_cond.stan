@@ -107,7 +107,7 @@ transformed parameters {
 
 model {
   // using priors from the estimated posteriors from Chakroun et al. 2020
-  beta_mu ~ normal(0.2,1); 
+  beta_mu ~ normal(0.2,0.1); 
   beta_sigma ~ normal(0.1,0.1); 
   phi_mu ~ normal(1,0.1);
   phi_sigma ~ normal(0.7,0.1);
@@ -136,20 +136,20 @@ model {
 
 generated quantities{
   //log_lik
- // vector[totalTrials] log_lik; // log likelihood for model comparison
-//  vector[4] pb;
+  vector[totalTrials] log_lik; // log likelihood for model comparison
+  vector[4] pb;
   //calculate difference between conditions
   real beta_diff;  // difference between beta_mu[1] (imperative) and beta_mu[2] (interrogative)
   real phi_diff; // directed exploration
   real persev_diff;
 
-  // for (t in 1:totalTrials){
-  //     pb = rep_vector(0.0, 4);
-  //     if (trialNum[t]>1) {
-  //        pb[choices[t-1]] = persev[subject[t]];
-  //     }
-  //     log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * (v[t] + eb[t] + pb));
-  // }
+  for (t in 1:totalTrials){
+      pb = rep_vector(0.0, 4);
+      if (trialNum[t]>1) {
+         pb[choices[t-1]] = persev[subject[t]];
+      }
+      log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * (v[t] + eb[t] + pb));
+  }
 
   beta_diff = beta_mu[1] - beta_mu[2];
   phi_diff = phi_mu[1] - phi_mu[2];
