@@ -202,3 +202,21 @@ plot(fit_Bayes_SMEP_cond,show_density = TRUE, pars = "persev_diff")
 ```
 
 There seems to be both a significant difference in beta and persev hyperparameters, where people in the imperative condition tended to place more weight on expected value when making bandit choices (beta), and those in the interrogative condition valued tended to repeat their previous choice (perseveration). However, compared to the values from Chakroun et al., these beta_mu's are really low, persev_mu rather large.
+
+We can try this model again with somewhat less informative priors:
+
+```{r}
+# running MCMC
+fit_Bayes_SMEP_cond_2 <- stan(
+  file = "Bayes_SMEP_cond.stan",  # Stan program
+  data = bayes_data_list_1,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 700,            # total number of iterations per chain
+  cores = 4
+  )
+
+traceplot(fit_Bayes_SMEP_cond_2, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"), inc_warmup=T)
+print(fit_Bayes_SMEP_cond_2, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","beta_diff","phi_diff", "persev_diff"), inc_warmup=T)
+```
+
