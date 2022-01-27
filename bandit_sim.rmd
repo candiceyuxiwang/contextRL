@@ -29,7 +29,7 @@ First, we can simulate 4 bandits whose reward payoffs drift randomly across tria
 # }
 # 
 # ### some variables
-total_trials <- 150
+total_trials <- 100
 # # initial values (can be changed!)
 # R1 <- 80 
 # R2 <- 70
@@ -159,13 +159,13 @@ return(as.data.frame(cbind(reward, choice,instantiation)))
 We can simulate a number of subjects using free parameters drawn from a normal distribution.
 
 ```{r}
-Nsub <- 50
+Nsub <- 100
 
 # parameter values (based on posterior estimates in Chakroun's winning model)
 #### tweak these to change agent behavior
-betas = rnorm(Nsub, 0.3, 0.1)
-phis = rnorm(Nsub, 1.5, 0.1)
-persevs = rnorm(Nsub, 4, 0.1)
+betas = rnorm(Nsub, 0.2, 0.1)
+phis = rnorm(Nsub, 1, 0.1)
+persevs = rnorm(Nsub, 5, 1)
 
 ## two groups of subjects with different phi's (directed exploration parameter)
 phis = c(rnorm(Nsub/2, 1.5, 0.1), rnorm(Nsub/2, 1.0, 0.1))

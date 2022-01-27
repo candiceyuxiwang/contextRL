@@ -220,3 +220,8 @@ traceplot(fit_Bayes_SMEP_cond_2, pars = c("beta_mu","beta_sigma","phi_mu","phi_s
 print(fit_Bayes_SMEP_cond_2, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","beta_diff","phi_diff", "persev_diff"), inc_warmup=T)
 ```
 
+Different results with different priors...
+
+But, we can try to classify exploit, direct explore, and random explore choices based on the the model-produced Q values and the exploration bonuses, and see if there are significant group differences between the results from different priors.
+
+Also, try a version of the delta learning rule
