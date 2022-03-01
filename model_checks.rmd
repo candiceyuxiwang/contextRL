@@ -1,0 +1,147 @@
+---
+title: "Model troubleshooting"
+author: "Candice Wang"
+date: "1/17/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## prior simulation 
+
+Simulate the range of priors given the hyperpriors to understand whether the hyperpriors are reasonable.
+
+```{r}
+# beta
+beta <- matrix(ncol = 100, nrow = 100)
+
+for(i in 1:100){
+beta_mu <- rnorm(1, mean = 0.1, sd = 0.1)
+beta_sigma <- rnorm(1, mean = 0.1, sd = 0.1)
+#beta_mu <- rnorm(1, mean = 0, sd = 1)
+#beta_sigma <- rnorm(1, mean = 0, sd = 1)
+
+for (s in 1:100){
+  beta_raw <- rnorm(1, mean = 0, sd = 0.1)
+  #beta_raw <- rnorm(1, mean = 0, sd = 1)
+  beta[i,s] <- beta_mu + beta_sigma*beta_raw
+}
+}
+hist(beta)
+```
+
+```{r}
+# phi
+phi <- matrix(ncol = 100, nrow = 100)
+
+for(i in 1:100){
+phi_mu <- rnorm(1, mean = 1, sd = 0.2)
+phi_sigma <- rnorm(1, mean = 0.7, sd = 0.1)
+#phi_mu <- rnorm(1, mean = 0, sd = 1)
+#phi_sigma <- rnorm(1, mean = 0, sd = 1)
+
+for (s in 1:100){
+  phi_raw <- rnorm(1, mean = 0, sd = 0.1)
+  #phi_raw <- rnorm(1, mean = 0, sd = 1)
+  phi[i,s] <- phi_mu + phi_sigma*phi_raw
+}
+}
+hist(phi)
+```
+
+
+```{r}
+# persev
+persev <- matrix(ncol = 100, nrow = 100)
+
+for(i in 1:100){
+persev_mu <- rnorm(1, mean = 5, sd = 1)
+persev_sigma <- rnorm(1, mean = 0.1, sd = 0.2)
+#persev_mu <- rnorm(1, mean = 0, sd = 1)
+#persev_sigma <- rnorm(1, mean = 0, sd = 1)
+
+for (s in 1:100){
+  persev_raw <- rnorm(1, mean = 0, sd = 1)
+  persev[i,s] <- persev_mu + persev_sigma*persev_raw
+}
+}
+hist(persev)
+```
+
+
+## prior predictive check
+
+Simulate data based on parameter set drawn from the prior and see if summary statistics align with domain knowledge.
+
+```{r}
+# observed data summary stats
+
+# distribution of total reward per subject
+learn_data %>%
+  group_by(ID) %>%
+  summarise(total_reward = sum(reward)) %>%
+  ggplot(aes(y = total_reward))+
+  geom_histogram()
+
+# distribution of optimal choice per subject
+learn_data %>%
+  group_by(ID) %>%
+  summarise(optimal = sum(optimal_choice)) %>%
+  ggplot(aes(y = optimal))+
+  geom_histogram()
+```
+
+See bandit_sim for the code on simulating agents
+
+```{r}
+sim_data <- data.frame(matrix(ncol = 5, nrow = total_trials*Nsub))
+colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation")
+for (s in 1:Nsub){
+  start_ind <- (s-1)*total_trials+1
+  end_ind <- s*total_trials
+  sub_sim <- sim_subject(beta[72,s],phi[72,s],persev[72,s])
+  sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
+  sim_data$trialnum[start_ind:end_ind] <- 1:total_trials
+  sim_data$choice[start_ind:end_ind] <- sub_sim$choice
+  sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+  sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
+}
+
+# distribution of total reward per subject
+sim_data %>%
+  group_by(subject) %>%
+  summarise(total_reward = sum(reward)) %>%
+  ggplot(aes(y = total_reward))+
+  geom_histogram()
+
+# check whether each choice was the optimal arm
+for (t in 1:nrow(sim_data)){
+  rewards <- get(paste("instantiation_",sim_data$instantiation[t],sep = ""))[sim_data$trialnum[t],]
+  sim_data$optimal[t] <- which.max(rewards)==sim_data$choice[t]
+}
+
+# distribution of optimal choice per subject
+sim_data %>%
+  group_by(subject) %>%
+  summarise(optimal = sum(optimal)) %>%
+  ggplot(aes(y = optimal))+
+  geom_histogram()
+```
+
+With the following priors from Chakroun et al., 2020,
+  // beta_mu ~ normal(0.2,0.1); 
+  // beta_sigma ~ normal(0.1,0.1); 
+  // phi_mu ~ normal(1,0.1);
+  // phi_sigma ~ normal(0.7,0.1);
+  // persev_mu ~ normal(5,1);
+  // persev_sigma ~ normal(0.1,0.2);
+  // 
+  // beta_raw ~ normal(0,0.1);
+  // phi_raw ~ normal(0,0.1);
+  // persev_raw ~ normal(0,1);
+  
+the simulated agents perform somewhat better than the actual participants consistently. Changing the beta_mu hyperprior distribution to normal(0.1, 1) helped with the problem a little bit but the simulated results seem less consistent.
+
+With a flatter set of priors (everything normal(0,1) ), the simulated results are less stable - occasionally vastly underperforming or overperforming than actual participants.
