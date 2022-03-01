@@ -221,6 +221,96 @@ binned_p_optimal%>%
   geom_jitter(aes(color = trial_bin))
 ```
 
+We can also simulate agents that follow a delta learning rule:
 
+```{r}
+soft_max_delta <- function(b, val, eb, phi, pb){
+  sumExp <- exp(b * (val[1] + eb[1]*phi + pb[1])) + exp(b * (val[2] + eb[2]*phi + pb[2])) +
+    exp(b * (val[3] + eb[3]*phi + pb[3])) + exp(b * (val[4] + eb[4]*phi + pb[4]))
+  choiceProb1 <- exp(b * (val[1] + eb[1]*phi +  pb[1]))/sumExp
+  choiceProb2 <- exp(b * (val[2] + eb[2]*phi +  pb[2]))/sumExp
+  choiceProb3 <- exp(b * (val[3] + eb[3]*phi +  pb[3]))/sumExp
+  choiceProb4 <- exp(b * (val[4] + eb[4]*phi +  pb[4]))/sumExp
+  return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
+}
 
+sim_subject_delta <- function(alpha, beta, phi, persev){
+# randomly select 1 reward schedule instantiation
+instantiation_num <- sample(1:3,1)
+reward_schedule <- get(paste("instantiation_",instantiation_num,sep = ""))[1:total_trials,]
+  
+# initialize choice, reward, expected value, and observation variance arrays
+instantiation <- rep(instantiation_num, total_trials)
+choice <- rep(0,total_trials)
+reward <- rep(0,total_trials)
+pe <- rep(0,total_trials)
+eb <- matrix(1, total_trials, 4) # initial value at 1
+v <- rep(50,4) # initial value at 50 points; 4 choices
+
+# simulate choices for each trial
+for (t in 1:total_trials){
+  pb <- rep(0,4)
+  if(t>0){
+    # perserveration
+    pb[choice[t-1]] = persev
+  
+  # exploration bonus 
+    for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+      if(length(which(choice %in% i))==0){
+        eb[t,i] <- t # hasn't been chosen before
+      }else{
+        eb[t,i] <- t - max(which(choice %in% i)) # the number of trials since it was last chosen
+      }
+    }
+  }
+    
+  # simulate choice on trial t based on softmax rule
+  choice[t] <- sample(4, size = 1, prob = soft_max_delta(beta, v, eb[t,], phi, pb))
+  
+  # get reward from reward schedule based on simulated choice
+  reward[t] <- reward_schedule[t,choice[t]]
+  
+  # calculate prediction error
+  pe[t] <- reward[t] - v[choice[t]]
+  
+  # update expected value based on prediction error and add perserveration bonus
+  v[choice[t]] = v[choice[t]] + alpha*pe[t]
+  
+}
+return(as.data.frame(cbind(reward, choice,instantiation, eb)))
+}
+```
+
+```{r}
+Nsub <- 100
+
+# parameter values (based on posterior estimates in Chakroun's winning model)
+#### tweak these to change agent behavior
+alphas = rbeta(Nsub, 2, 5)
+betas = rnorm(Nsub, 0.2, 0.1)
+persevs = rnorm(Nsub, 2, 1)
+
+## two groups of subjects with different phi's (directed exploration parameter)
+phis = c(rnorm(Nsub/2, 1.5, 0.1), rnorm(Nsub/2, 1.0, 0.1))
+sim_cond <- c(rep(2, Nsub/2), rep(1, Nsub/2))
+
+# simuluate data for all subjects
+sim_data <- data.frame(matrix(ncol = 9, nrow = total_trials*Nsub))
+colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation","eb_arm1","eb_arm2", "eb_arm3", "eb_arm4")
+for (s in 1:Nsub){
+  start_ind <- (s-1)*total_trials+1
+  end_ind <- s*total_trials
+  sub_sim <- sim_subject_delta(alphas[s], betas[s],phis[s], persevs[s])
+  sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
+  sim_data$trialnum[start_ind:end_ind] <- 1:total_trials
+  sim_data$choice[start_ind:end_ind] <- sub_sim$choice
+  sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+  sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
+  sim_data$eb_arm1[start_ind:end_ind] <- sub_sim$V4
+  sim_data$eb_arm2[start_ind:end_ind] <- sub_sim$V5
+  sim_data$eb_arm3[start_ind:end_ind] <- sub_sim$V6
+  sim_data$eb_arm4[start_ind:end_ind] <- sub_sim$V7
+}
+```
 
