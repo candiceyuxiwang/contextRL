@@ -223,3 +223,29 @@ mcmc_recover_scatter(draws, true)
 
 The two-condition Bayes_SMEP model was able to recover the parameters for simulated data reasonably well.
 
+We can also try the two-condition delta_SMEP model, using simulated data where the delta learning rule is the ground-truth data generating mechanism.
+
+```{r}
+# from bandit_sim
+sim_data_list_delta  <- list(
+             totalTrials = nrow(sim_data), 
+             nSubjects = max(sim_data$subject), 
+             subject = sim_data$subject, 
+             trialNum = sim_data$trialnum,
+             choices = sim_data$choice, 
+             rewards = sim_data$reward,
+             eb = as.matrix(sim_data[,6:9]), # em_arm1:4
+             condition = sim_cond,
+             nSubCond1 = sum(sim_cond==1)
+             ) 
+
+sim_fit_delta_SMEP_cond <- stan(
+  file = "delta_SMEP_cond.stan",  # Stan program
+  data = sim_data_list_delta,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+  )
+```
+
