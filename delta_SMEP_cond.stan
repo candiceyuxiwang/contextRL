@@ -40,8 +40,6 @@ parameters {
 transformed parameters {
   // Q value - learned from reward
   vector[4] Q[totalTrials];
-  // perserveration bonus
-  vector[4] pb[totalTrials];
   
   // actual beta and eta, determined by mu and sigma hyperparameters
   vector[nSubjects] eta;
@@ -60,30 +58,29 @@ transformed parameters {
     if (trialNum[t]==1){ // first trial for a given subject
       for (arm in 1:4){
         Q[t][arm] = 50; // initial expected utilities for all arms
-        pb[t][arm] = 0;
       }
     } else{
       for (arm in 1:4){
         Q[t][arm] = Q[t-1][arm]; // inherit previous value
-        pb[t][arm] = 0;
       }
       //if (choices[t-1] != 0){ // if the previous trial was not a missed trial, update estimated reward and perserv bonus
        Q[t][choices[t-1]] = Q[t-1][choices[t-1]] + inv_logit(eta[subject[t]]) * (rewards[t-1] - Q[t-1][choices[t-1]]);
-       pb[t][choices[t-1]] = persev[subject[t]];
       //}
     }
   }
 }
 
 model {
+  vector[4] pb;
+  
   eta_mu ~ normal(0,5); 
-  eta_sigma ~ cauchy(0,1); 
-  beta_mu ~ normal(0,5); 
-  beta_sigma ~ cauchy(0,1); 
-  phi_mu ~ normal(0,1);
-  phi_sigma ~ cauchy(0,1);
+  eta_sigma ~ normal(0,1); 
+  beta_mu ~ normal(0,3); 
+  beta_sigma ~ normal(0,1); 
+  phi_mu ~ normal(1,1);
+  phi_sigma ~ normal(0,1);
   persev_mu ~ normal(0,1);
-  persev_sigma ~ cauchy(0,1);
+  persev_sigma ~ normal(0,1);
   
   beta_raw ~ normal(0,1);
   eta_raw ~ normal(0,1);
@@ -91,8 +88,15 @@ model {
   persev_raw ~ normal(0,1);
   
   for (t in 1:totalTrials){
+    for(arm in 1:4){
+      pb[arm] = 0;
+    }
+    if(trialNum[t]>1){
+      // if this is not the first trial, update the perserveration bonus based on the last choice
+      pb[choices[t-1]] = persev[subject[t]];
+    }
    // if (choices[t] != 0){ // adding this to avoid issues with missed trials
-      choices[t] ~ categorical_logit(beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t] + pb[t])); // the probability of the choices on each trial given utilities and exploration bonus
+      choices[t] ~ categorical_logit(beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t] + pb)); // the probability of the choices on each trial given utilities and exploration bonus
    // }
   }
 }
