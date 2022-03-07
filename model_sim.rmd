@@ -247,5 +247,34 @@ sim_fit_delta_SMEP_cond <- stan(
   iter = 400,            # total number of iterations per chain
   cores = 4
   )
+
+print(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu","alpha_diff","beta_diff","phi_diff","persev_diff"))
+
+traceplot(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","beta_sigma", "phi_mu","phi_sigma","persev_mu","persev_sigma"))
+
+stan_hist(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu","alpha_diff","beta_diff","phi_diff","persev_diff"))
+
+# diagnostics
+check_hmc_diagnostics(sim_fit_delta_SMEP_cond)
+
+library(bayesplot)
+# pairs plot
+pairs(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu"))
+# rank plot
+sim_fit_delta_SMEP_cond_posterior <- as.array(sim_fit_delta_SMEP_cond, par=c("eta_mu[1]","eta_mu[2]","eta_sigma", "beta_mu[1]", "beta_mu[2]","beta_sigma", "phi_mu[1]","phi_mu[2]","phi_sigma","persev_mu[1]","persev_mu[2]", "persev_sigma"))
+mcmc_rank_hist(sim_fit_delta_SMEP_cond_posterior, par =c("eta_mu[1]","eta_mu[2]","eta_sigma","beta_mu[1]", "beta_mu[2]", "phi_mu[1]","phi_mu[2]"))
+
+
+np <- nuts_params(sim_fit_delta_SMEP_cond)
+mcmc_neff(neff_ratio(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu","alpha_diff","beta_diff","phi_diff","persev_diff")), size = 2)
+```
+
+the model has some sampling problems 
+
+We can try an alternative parameterization of the hyperparameters that specifiies the difference between two groups as eta_mu_diff, beta_mu_diff, and phi_mu_diff.
+
+```{r}
+print(sim_fit_delta_SMEP_cond_alt, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma", "alpha_mu_diff","beta_mu_diff","phi_mu_diff","eta_mu_diff"))
+# still having issues with phi_sigma and eta_sigma
 ```
 
