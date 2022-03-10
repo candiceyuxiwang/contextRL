@@ -16,6 +16,28 @@ library(dplyr)
 library(ggplot2)
 learn_data <- read.csv("/Volumes/main2/studies/Context_RL/Data/context_RL_learn.csv")
 
+# obtain reward list info based on reward sequence
+learn_data$reward_list <- NA
+for (sub in 1:length(unique(learn_data$ID))){
+  if(as.numeric(as.factor(unique(learn_data$ID))[sub]) < 39){ # only 92 trials for this subject
+      start_ind <- 100*(as.numeric(as.factor(unique(learn_data$ID))[sub])-1)+1
+      end_ind <- 100*as.numeric(as.factor(unique(learn_data$ID))[sub])
+  }else if(as.numeric(as.factor(unique(learn_data$ID))[sub]) == 39){
+      start_ind <- 100*(as.numeric(as.factor(unique(learn_data$ID))[sub])-1)+1
+      end_ind <- 100*as.numeric(as.factor(unique(learn_data$ID))[sub]) - 8
+  }else{
+      start_ind <- 100*(as.numeric(as.factor(unique(learn_data$ID))[sub])-1)+1 -8
+      end_ind <- 100*as.numeric(as.factor(unique(learn_data$ID))[sub]) -8
+  }
+  if(learn_data$blue_val[learn_data$learn_trial_n==1][as.numeric(as.factor(unique(learn_data$ID))[sub])] == 37.634){
+    learn_data$reward_list[start_ind:end_ind] <- 3
+  }else if(learn_data$blue_val[learn_data$learn_trial_n==1][as.numeric(as.factor(unique(learn_data$ID))[sub])] == 39.894){
+    learn_data$reward_list[start_ind:end_ind] <- 1
+  }else{
+    learn_data$reward_list[start_ind:end_ind] <- 2
+  }
+}
+
 #convert door choice into numeric variable
 ### door numbers
 door_key <- c("red","blue","purple","yellow")
@@ -69,7 +91,7 @@ rstan_options(auto_write = TRUE)
 
 ```{r}
 # compute exploration bonus for delta learning rule
-exploration_bonus <- matrix(nrow = nrow(learn_data), ncol = 4)
+exploration_bonus <- data.frame(matrix(nrow = nrow(learn_data), ncol = 4))
 for (t in 1:(nrow(learn_data)-1)){
   if(learn_data$learn_trial_n[t]==1){
     exploration_bonus[t,] <- 1
@@ -224,4 +246,107 @@ Different results with different priors...
 
 But, we can try to classify exploit, direct explore, and random explore choices based on the the model-produced Q values and the exploration bonuses, and see if there are significant group differences between the results from different priors.
 
-Also, try a version of the delta learning rule
+We can also try fitting a two-condition version of the delta learning model:
+
+```{r}
+learn_data_list_delta <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             eb = exploration_bonus, 
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
+             ) 
+learn_fit_delta_SMEP_cond <- rstan::stan(
+  file = "delta_SMEP_cond.stan",  # Stan program
+  data = learn_data_list_delta,    # named list of data
+  chains = 4,             # number of Markov chains
+  warmup = 200,          # number of warmup iterations per chain
+  iter = 400,            # total number of iterations per chain
+  cores = 4
+)
+
+print(learn_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu","alpha_diff","beta_diff","phi_diff","persev_diff"))
+
+```
+
+fit observed data to the simple delta learning model (no exploration bonus or perserveration):
+
+```{r}
+learn_data_list_delta_SM <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
+             ) 
+
+print(learn_fit_delta_SM_cond_diffpriors, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma", "alpha_mu_diff", "beta_mu_diff","eta_mu_diff"))
+```
+
+This model works, both with tighter priors and more diffuse priors (delta_SM_cond_diffpriors.stan). fitted objects are saved on cerberus.
+
+Now, we can look at the estimated group differences in learning rate and inverse temperature:
+
+```{r}
+learn_fit_delta_SM_cond_diffpriors <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/learn_fit_delta_SM_cond_diffpriors.rds")
+
+plot(learn_fit_delta_SM_cond_diffpriors, pars = c("alpha_mu_diff","beta_mu_diff"))
+```
+
+At the group level, participants in the imperative condition had higher learning rates than those in the interrogative condition.
+
+
+We can classify whether a trial is exploitative or exploratory based on the model-estiamted Q value, and whether it is directed exploration (choosing the choice with the most uncertainty) or random exploration based on choice history.
+
+```{r}
+# extract Q value
+delta_SM_Q_summary <- summary(learn_fit_delta_SM_cond_diffpriors, pars = c("Q"), probs = c(0.1, 0.9))$summary
+delta_SM_Q_summary <- delta_SM_Q_summary[,"mean"]
+delta_SM_Q_summary <- matrix(delta_SM_Q_summary, nrow = nrow(learn_data), byrow = T)
+delta_SM_Q_summary <- as.data.frame(delta_SM_Q_summary)
+delta_SM_Q_summary <- delta_SM_Q_summary %>%
+  cbind(max_Q_choice = max.col(delta_SM_Q_summary, 'first'))
+
+# append columns needed 
+exploration_bonus <- exploration_bonus %>%
+  cbind(dir_expl_choice = max.col(exploration_bonus, 'first'))
+exploration_bonus$learn_trial_n <- learn_data$learn_trial_n
+exploration_bonus$subject <- learn_data$ID_num
+exploration_bonus$condition <- as.factor(learn_data$condition)
+exploration_bonus$reward_list <- as.factor(learn_data$reward_list)
+  
+# classify choice on each trial 
+choice_classification <- exploration_bonus %>%
+  cbind(choice = learn_data$chosen_door_num) %>%
+  cbind(delta_SM_Q_summary) %>%
+  mutate(choice_type = case_when(
+    choice == max_Q_choice ~ "exploitation",
+    choice == dir_expl_choice ~ "directed_exploration",
+    TRUE ~ "random_exploration"
+  ),choice_type = as.factor(choice_type))
+
+# plot
+choice_classification %>%
+  group_by(subject, condition) %>%
+  count(choice_type) %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  ggplot(aes(x = condition, y = n, color = choice_type))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))
+
+# some stats
+library(mclogit)
+mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
+summary(mod)
+
+```
+
+Need to think about how to set the reference group in the multinomial logistic regression, but it does seem like the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
