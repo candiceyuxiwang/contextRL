@@ -45,26 +45,19 @@ transformed parameters {
   vector[nSubjects] beta;
   vector[nSubjects] phi;
   
-  // group means
-  vector[2] eta_mu_grp;
-  vector[2] beta_mu_grp;
-  vector[2] phi_mu_grp;
-  
-  eta_mu_grp[1] = eta_mu + eta_mu_diff/2;
-  eta_mu_grp[2] = eta_mu - eta_mu_diff/2;
-  beta_mu_grp[1] = beta_mu + beta_mu_diff/2;
-  beta_mu_grp[2] = beta_mu - beta_mu_diff/2;
-  phi_mu_grp[1] = phi_mu + phi_mu_diff/2;
-  phi_mu_grp[2] = phi_mu - phi_mu_diff/2;
-
   for (s in 1:nSubjects){
-    eta[s] = eta_mu_grp[condition[s]] + eta_sigma * eta_raw[s];
-    beta[s] = beta_mu_grp[condition[s]] + beta_sigma * beta_raw[s];
-    phi[s] = phi_mu_grp[condition[s]] + phi_sigma * phi_raw[s];
+   if(condition[s]==1){
+      eta[s] = eta_mu + eta_mu_diff/2 + eta_sigma * eta_raw[s];
+      beta[s] = beta_mu + beta_mu_diff/2 + beta_sigma * beta_raw[s];
+      phi[s] = phi_mu + phi_mu_diff/2 + phi_sigma * phi_raw[s];
+    }else{
+      eta[s] = eta_mu - eta_mu_diff/2 + eta_sigma * eta_raw[s];
+      beta[s] = beta_mu - beta_mu_diff/2 + beta_sigma * beta_raw[s];
+      phi[s] = phi_mu - phi_mu_diff/2 + phi_sigma * phi_raw[s];
+    }
   }
   
   for (t in 1:totalTrials){
-    
     if (trialNum[t]==1){ // first trial for a given subject
       for (arm in 1:4){
         Q[t][arm] = 50; // initial expected utilities for all arms
@@ -87,9 +80,9 @@ model {
   beta_mu ~ normal(0.1,0.1); 
   beta_mu_diff ~ normal(0,0.1);
   beta_sigma ~ normal(0,0.1); 
-  phi_mu ~ normal(1,1);
-  phi_mu_diff ~ normal(0,1);
-  phi_sigma ~ normal(0,1);
+  phi_mu ~ normal(0,0.1);
+  phi_mu_diff ~ normal(0,0.1);
+  phi_sigma ~ normal(0,0.1);
   
   beta_raw ~ normal(0,1);
   eta_raw ~ normal(0,1);
@@ -97,7 +90,7 @@ model {
   
   for (t in 1:totalTrials){
     if (choices[t] != 0){ // adding this to avoid issues with missed trials
-      choices[t] ~ categorical_logit(beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t])); // the probability of the choices on each trial given utilities and exploration bonus
+      choices[t] ~ categorical_logit(beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t]); // the probability of the choices on each trial given utilities and exploration bonus
     }
   }
 }
@@ -136,7 +129,7 @@ generated quantities{
   
   for (t in 1:totalTrials){
     if (choices[t] != 0){ // adding this to avoid issues with missed trials
-      log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t]));
+      log_lik[t] = categorical_logit_lpmf(choices[t] | (beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t]));
     }
   }
   
