@@ -78,9 +78,9 @@ learn_data %>%
 
 ## model-based analysis of choice data
 
-We can try fitting the model with directed exploration bonus, perserveration bonus, and random exploration bonus.
+We can try fitting the model with a delta learning rule for reward updating.
 
-On each trial, the expected reward is updated using a delta learning rule.
+We expect that participants in the interrogative condition would have greater directed exploration compared to participants in the imperative condition, while the other parameters would not necessarily differ. We can model them as two separate populations and estimate the *difference* in directed exploration, random exploration, and perserveration free parameters between the two groups.
 
 ```{r}
 library(rstan)
@@ -106,6 +106,7 @@ for (t in 1:(nrow(learn_data)-1)){
   }
 }
 
+# make data lists for stan
 delta_data_list  <- list(
              totalTrials = nrow(learn_data), 
              nSubjects = length(unique(learn_data$ID)), 
@@ -115,39 +116,6 @@ delta_data_list  <- list(
              rewards = learn_data$reward,
              eb = exploration_bonus
              ) 
-
-# delta learning rule with softmax choice rule, directed exploration, and perserveration
-### this one has some sampling issues
-fit_delta_SMEP <- stan(
-  file = "delta_SMEP.stan",  # Stan program
-  data = delta_data_list,    # named list of data
-  chains = 4,             # number of Markov chains
-  warmup = 100,          # number of warmup iterations per chain
-  iter = 200,            # total number of iterations per chain
-  cores = 4
-  )
-traceplot(fit_delta_SMEP, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
-print(fit_delta_SMEP, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
-
-# delta learning rule with softmax choice rule, directed exploration, random exploration, and perserveration
-fit_delta_SMEPR <- stan(
-  file = "delta_SMEPR.stan",  # Stan program
-  data = delta_data_list,    # named list of data
-  chains = 4,             # number of Markov chains
-  warmup = 100,          # number of warmup iterations per chain
-  iter = 200,            # total number of iterations per chain
-  cores = 4
-  )
-
-traceplot(fit_delta_SMEPR, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","gamma_mu","gamma_sigma"))
-
-print(fit_delta_SMEPR, pars = c("beta_mu","beta_sigma","eta_mu","eta_sigma","alpha_mu","alpha_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","gamma_mu","gamma_sigma"))
-stan_hist(fit_delta_SMEPR, pars = c("beta_mu","alpha_mu","phi_mu","persev_mu","gamma_mu"))
-```
-
-We can also use a Bayesian learning rule where the learning rate depends on the uncertainty of each bandit's value. 
-
-```{r}
 bayes_data_list <- list(
              totalTrials = nrow(learn_data), 
              nSubjects = length(unique(learn_data$ID)), 
@@ -156,21 +124,117 @@ bayes_data_list <- list(
              choices = learn_data$chosen_door_num, 
              rewards = learn_data$reward
 )
-# Bayes_SMEP, with directed exploration and perserveration bonus, is the best fitting model from Chakroun et al. 2020
-fit_Bayes_SMEP <- stan(
-  file = "Bayes_SMEP.stan",  # Stan program
-  data = bayes_data_list,    # named list of data
-  chains = 4,             # number of Markov chains
-  warmup = 100,          # number of warmup iterations per chain
-  iter = 200,            # total number of iterations per chain
-  cores = 4
-  )
-## this doesn't work yet
+
+# with condition information
+learn_data_list_delta <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             eb = exploration_bonus, 
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
+             ) 
+bayes_data_list_1 <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))
+)
 ```
 
-### do the two groups differ in exploration and exploitation during learning?
+fit observed data to the simple delta learning model (no exploration bonus or perserveration):
 
-We expect that participants in the interrogative condition would have greater directed exploration compared to participants in the imperative condition, while the other parameters would not necessarily differ. We can model them as two separate populations and estimate the *difference* in directed exploration, random exploration, and perserveration between the two groups.
+```{r delta_SM}
+learn_data_list_delta_SM <- list(
+             totalTrials = nrow(learn_data),
+             nSubjects = length(unique(learn_data$ID)),
+             subject = learn_data$ID_num,
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num,
+             rewards = learn_data$reward,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
+             )
+# run on Cerberus
+
+learn_fit_delta_SM_cond_diffpriors <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/learn_fit_delta_SM_cond_diffpriors.rds")
+
+print(learn_fit_delta_SM_cond_diffpriors, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma", "alpha_mu_diff", "beta_mu_diff","eta_mu_diff"))
+```
+
+This model works, both with tighter priors and more diffuse priors (delta_SM_cond_diffpriors.stan). fitted objects are saved on cerberus.
+
+Now, we can look at the estimated group differences in learning rate and inverse temperature:
+
+```{r}
+plot(learn_fit_delta_SM_cond_diffpriors, pars = c("alpha_mu_diff","beta_mu_diff"))
+```
+
+At the group level, participants in the imperative condition had higher learning rates than those in the interrogative condition.
+
+Now, we can add in another free parameter for the directed exploration bonus. 
+
+```{r delta_SME}
+
+```
+
+### classify choice type based on model-derived expected values
+
+We can classify whether a trial is exploitative or exploratory based on the model-estiamted Q value, and whether it is directed exploration (choosing the choice with the most uncertainty) or random exploration based on choice history.
+
+```{r}
+# extract Q value
+delta_SM_Q_summary <- summary(learn_fit_delta_SM_cond_diffpriors, pars = c("Q"), probs = c(0.1, 0.9))$summary
+delta_SM_Q_summary <- delta_SM_Q_summary[,"mean"]
+delta_SM_Q_summary <- matrix(delta_SM_Q_summary, nrow = nrow(learn_data), byrow = T)
+delta_SM_Q_summary <- as.data.frame(delta_SM_Q_summary)
+delta_SM_Q_summary <- delta_SM_Q_summary %>%
+  cbind(max_Q_choice = max.col(delta_SM_Q_summary, 'first'))
+
+# append columns needed 
+exploration_bonus <- exploration_bonus %>%
+  cbind(dir_expl_choice = max.col(exploration_bonus, 'first'))
+exploration_bonus$learn_trial_n <- learn_data$learn_trial_n
+exploration_bonus$subject <- learn_data$ID_num
+exploration_bonus$condition <- as.factor(learn_data$condition)
+exploration_bonus$reward_list <- as.factor(learn_data$reward_list)
+  
+# classify choice on each trial 
+choice_classification <- exploration_bonus %>%
+  cbind(choice = learn_data$chosen_door_num) %>%
+  cbind(delta_SM_Q_summary) %>%
+  mutate(choice_type = case_when(
+    choice == max_Q_choice ~ "exploitation",
+    choice == dir_expl_choice ~ "directed_exploration",
+    TRUE ~ "random_exploration"
+  ),choice_type = as.factor(choice_type))
+
+# plot
+choice_classification %>%
+  group_by(subject, condition) %>%
+  count(choice_type) %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  ggplot(aes(x = condition, y = n, color = choice_type))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))
+
+# some stats
+library(mclogit)
+mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
+summary(mod)
+
+```
+
+
+Based on the the multinomial logistic regression, the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
+
 
 ```{r}
 # library(cmdstanr)
@@ -187,17 +251,6 @@ We expect that participants in the interrogative condition would have greater di
 # fit_Bayes_SMEP$print(c("beta_diff","phi_diff","perserv_diff"))
 # stanfit <- rstan::read_stan_csv(fit_Bayes_SMEP$output_files())
 
-
-# new data list with condition information
-bayes_data_list_1 <- list(
-             totalTrials = nrow(learn_data), 
-             nSubjects = length(unique(learn_data$ID)), 
-             subject = learn_data$ID_num, 
-             trialNum = learn_data$learn_trial_n,
-             choices = learn_data$chosen_door_num, 
-             rewards = learn_data$reward,
-             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))
-)
 
 # running MCMC
 fit_Bayes_SMEP_cond <- stan(
@@ -246,107 +299,3 @@ Different results with different priors...
 
 But, we can try to classify exploit, direct explore, and random explore choices based on the the model-produced Q values and the exploration bonuses, and see if there are significant group differences between the results from different priors.
 
-We can also try fitting a two-condition version of the delta learning model:
-
-```{r}
-learn_data_list_delta <- list(
-             totalTrials = nrow(learn_data), 
-             nSubjects = length(unique(learn_data$ID)), 
-             subject = learn_data$ID_num, 
-             trialNum = learn_data$learn_trial_n,
-             choices = learn_data$chosen_door_num, 
-             rewards = learn_data$reward,
-             eb = exploration_bonus, 
-             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
-             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
-             ) 
-learn_fit_delta_SMEP_cond <- rstan::stan(
-  file = "delta_SMEP_cond.stan",  # Stan program
-  data = learn_data_list_delta,    # named list of data
-  chains = 4,             # number of Markov chains
-  warmup = 200,          # number of warmup iterations per chain
-  iter = 400,            # total number of iterations per chain
-  cores = 4
-)
-
-print(learn_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu","alpha_diff","beta_diff","phi_diff","persev_diff"))
-
-```
-
-fit observed data to the simple delta learning model (no exploration bonus or perserveration):
-
-```{r}
-learn_data_list_delta_SM <- list(
-             totalTrials = nrow(learn_data), 
-             nSubjects = length(unique(learn_data$ID)), 
-             subject = learn_data$ID_num, 
-             trialNum = learn_data$learn_trial_n,
-             choices = learn_data$chosen_door_num, 
-             rewards = learn_data$reward,
-             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
-             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
-             ) 
-
-print(learn_fit_delta_SM_cond_diffpriors, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma", "alpha_mu_diff", "beta_mu_diff","eta_mu_diff"))
-```
-
-This model works, both with tighter priors and more diffuse priors (delta_SM_cond_diffpriors.stan). fitted objects are saved on cerberus.
-
-Now, we can look at the estimated group differences in learning rate and inverse temperature:
-
-```{r}
-learn_fit_delta_SM_cond_diffpriors <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/learn_fit_delta_SM_cond_diffpriors.rds")
-
-plot(learn_fit_delta_SM_cond_diffpriors, pars = c("alpha_mu_diff","beta_mu_diff"))
-```
-
-At the group level, participants in the imperative condition had higher learning rates than those in the interrogative condition.
-
-
-We can classify whether a trial is exploitative or exploratory based on the model-estiamted Q value, and whether it is directed exploration (choosing the choice with the most uncertainty) or random exploration based on choice history.
-
-```{r}
-# extract Q value
-delta_SM_Q_summary <- summary(learn_fit_delta_SM_cond_diffpriors, pars = c("Q"), probs = c(0.1, 0.9))$summary
-delta_SM_Q_summary <- delta_SM_Q_summary[,"mean"]
-delta_SM_Q_summary <- matrix(delta_SM_Q_summary, nrow = nrow(learn_data), byrow = T)
-delta_SM_Q_summary <- as.data.frame(delta_SM_Q_summary)
-delta_SM_Q_summary <- delta_SM_Q_summary %>%
-  cbind(max_Q_choice = max.col(delta_SM_Q_summary, 'first'))
-
-# append columns needed 
-exploration_bonus <- exploration_bonus %>%
-  cbind(dir_expl_choice = max.col(exploration_bonus, 'first'))
-exploration_bonus$learn_trial_n <- learn_data$learn_trial_n
-exploration_bonus$subject <- learn_data$ID_num
-exploration_bonus$condition <- as.factor(learn_data$condition)
-exploration_bonus$reward_list <- as.factor(learn_data$reward_list)
-  
-# classify choice on each trial 
-choice_classification <- exploration_bonus %>%
-  cbind(choice = learn_data$chosen_door_num) %>%
-  cbind(delta_SM_Q_summary) %>%
-  mutate(choice_type = case_when(
-    choice == max_Q_choice ~ "exploitation",
-    choice == dir_expl_choice ~ "directed_exploration",
-    TRUE ~ "random_exploration"
-  ),choice_type = as.factor(choice_type))
-
-# plot
-choice_classification %>%
-  group_by(subject, condition) %>%
-  count(choice_type) %>%
-  ungroup() %>%
-  group_by(condition) %>%
-  ggplot(aes(x = condition, y = n, color = choice_type))+
-  geom_boxplot()+
-  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))
-
-# some stats
-library(mclogit)
-mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
-summary(mod)
-
-```
-
-Need to think about how to set the reference group in the multinomial logistic regression, but it does seem like the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
