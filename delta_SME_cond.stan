@@ -74,15 +74,15 @@ transformed parameters {
 }
 
 model {
-  eta_mu ~ normal(0,1); 
-  eta_mu_diff ~ normal(0,1);
-  eta_sigma ~ normal(0,1); 
-  beta_mu ~ normal(0.1,0.1); 
-  beta_mu_diff ~ normal(0,0.1);
-  beta_sigma ~ normal(0,0.1); 
-  phi_mu ~ normal(0,0.1);
-  phi_mu_diff ~ normal(0,0.1);
-  phi_sigma ~ normal(0,0.1);
+  eta_mu ~ normal(0,5); 
+  eta_mu_diff ~ normal(0,5);
+  eta_sigma ~ normal(0,5); 
+  beta_mu ~ normal(0,1); 
+  beta_mu_diff ~ normal(0,1);
+  beta_sigma ~ normal(0,1); 
+  phi_mu ~ normal(0,1);
+  phi_mu_diff ~ normal(0,1);
+  phi_sigma ~ normal(0,1);
   
   beta_raw ~ normal(0,1);
   eta_raw ~ normal(0,1);
