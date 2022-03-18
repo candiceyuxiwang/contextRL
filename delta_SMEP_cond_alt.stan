@@ -31,6 +31,7 @@ parameters {
   real phi_mu_diff;
   real<lower=0> phi_sigma; // hyperparameter for the standard deviation of distribution of phi parameters
   real persev_mu; // hyperparameter for perserveration
+  real persev_mu_diff;
   real<lower=0> persev_sigma;
   
   vector[nSubjects] eta_raw; // these are used to remove dependencies between parameters
@@ -55,13 +56,14 @@ transformed parameters {
       eta[s] = eta_mu + eta_mu_diff/2 + eta_sigma * eta_raw[s];
       beta[s] = beta_mu + beta_mu_diff/2 + beta_sigma * beta_raw[s];
       phi[s] = phi_mu + phi_mu_diff/2 + phi_sigma * phi_raw[s];
+      persev[s] = persev_mu + persev_mu_diff/2 + persev_sigma * persev_raw[s];
     }else{
       eta[s] = eta_mu - eta_mu_diff/2 + eta_sigma * eta_raw[s];
       beta[s] = beta_mu - beta_mu_diff/2 + beta_sigma * beta_raw[s];
       phi[s] = phi_mu - phi_mu_diff/2 + phi_sigma * phi_raw[s];
+      persev[s] = persev_mu - persev_mu_diff/2 + persev_sigma * persev_raw[s];
     }
   }
-  persev = persev_mu + persev_sigma * persev_raw;
   
   for (t in 1:totalTrials){
     if (trialNum[t]==1){ // first trial for a given subject
@@ -82,13 +84,13 @@ transformed parameters {
 model {
   vector[4] pb;
   
-  eta_mu ~ normal(0,1); 
-  eta_mu_diff ~ normal(0,1);
-  eta_sigma ~ normal(0,1); 
-  beta_mu ~ normal(0.1,0.1); 
-  beta_mu_diff ~ normal(0,0.1);
-  beta_sigma ~ normal(0,0.1); 
-  phi_mu ~ normal(1,1);
+  eta_mu ~ normal(0,3); 
+  eta_mu_diff ~ normal(0,3);
+  eta_sigma ~ normal(0,3); 
+  beta_mu ~ normal(0,1); 
+  beta_mu_diff ~ normal(0,1);
+  beta_sigma ~ normal(0,1); 
+  phi_mu ~ normal(0,1);
   phi_mu_diff ~ normal(0,1);
   phi_sigma ~ normal(0,1);
   persev_mu ~ normal(0,1);
@@ -108,7 +110,7 @@ model {
       pb[choices[t-1]] = persev[subject[t]];
     }
    // if (choices[t] != 0){ // adding this to avoid issues with missed trials
-      choices[t] ~ categorical_logit(beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t] + pb)); // the probability of the choices on each trial given utilities and exploration bonus
+      choices[t] ~ categorical_logit(beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t] + pb); // the probability of the choices on each trial given utilities and exploration bonus
    // }
   }
 }
@@ -155,7 +157,7 @@ generated quantities{
       pb[choices[t-1]] = persev[subject[t]];
     }
     //if (choices[t] != 0){ // adding this to avoid issues with missed trials
-      log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * (Q[t] + phi[subject[t]] * eb[t] + pb));
+      log_lik[t] = categorical_logit_lpmf(choices[t] | (beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t] + pb));
     //}
   }
   
