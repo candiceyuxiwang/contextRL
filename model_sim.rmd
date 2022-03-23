@@ -264,6 +264,7 @@ pairs(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_
 sim_fit_delta_SMEP_cond_posterior <- as.array(sim_fit_delta_SMEP_cond, par=c("eta_mu[1]","eta_mu[2]","eta_sigma", "beta_mu[1]", "beta_mu[2]","beta_sigma", "phi_mu[1]","phi_mu[2]","phi_sigma","persev_mu[1]","persev_mu[2]", "persev_sigma"))
 mcmc_rank_hist(sim_fit_delta_SMEP_cond_posterior, par =c("eta_mu[1]","eta_mu[2]","eta_sigma","beta_mu[1]", "beta_mu[2]", "phi_mu[1]","phi_mu[2]"))
 
+stan_par(sim_fit_delta_SMEP_cond, par = "eta_sigma")
 
 np <- nuts_params(sim_fit_delta_SMEP_cond)
 mcmc_neff(neff_ratio(sim_fit_delta_SMEP_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma", "beta_mu","phi_mu","persev_mu","alpha_diff","beta_diff","phi_diff","persev_diff")), size = 2)
@@ -276,5 +277,22 @@ We can try an alternative parameterization of the hyperparameters that specifiie
 ```{r}
 print(sim_fit_delta_SMEP_cond_alt, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma", "alpha_mu_diff","beta_mu_diff","phi_mu_diff","eta_mu_diff"))
 # still having issues with phi_sigma and eta_sigma
+```
+
+two condition delta_SM?
+
+```{r}
+sim_data_list_delta_SM  <- list(
+    totalTrials = nrow(sim_data), 
+    nSubjects = max(sim_data$subject), 
+    subject = sim_data$subject, 
+    trialNum = sim_data$trialnum,
+    choices = sim_data$choice, 
+    rewards = sim_data$reward,
+    condition = sim_cond,
+    nSubCond1 = sum(sim_cond==1)
+) 
+
+print(sim_fit_delta_SM_cond, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma", "alpha_mu_diff","beta_mu_diff","eta_mu_diff"))
 ```
 
