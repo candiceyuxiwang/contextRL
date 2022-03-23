@@ -83,16 +83,11 @@ transformed parameters {
     if (trialNum[t]==1){ // first trial for a given subject
       v[t]   = rep_vector(v1, 4);
       sig = rep_vector(sig1, 4);
-      pe = 0;
-      Kgain[t] = sig[choices[t]]^2 / (sig[choices[t]]^2 + sigO^2);
-    } else{
-//      if (choices[t-1] != 0){ 
-//        pb[choices[t-1]] = persev[subject[t]];
-//      }
-       // choice 
-      pe    = rewards[t] - v[t][choices[t]];                       // prediction error 
-      Kgain[t] = sig[choices[t]]^2 / (sig[choices[t]]^2 + sigO^2); // Kalman gain
-    }
+
+    } 
+    pe    = rewards[t] - v[t][choices[t]];                       // prediction error 
+    Kgain[t] = sig[choices[t]]^2 / (sig[choices[t]]^2 + sigO^2); // Kalman gain
+
  //   eb[t] = phi[subject[t]] * sig;
 //    }
     if(t<totalTrials){ // update prior distribution for all 4 bandits
