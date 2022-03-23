@@ -1,7 +1,7 @@
 ---
 title: "Prolific_data_analysis.rmd"
 author: "Candice Wang"
-date: "1/5/2022"
+date: "3/22/2022"
 output: html_document
 ---
 
@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### read in data
+## load choice data
 
 ```{r}
 library(dplyr)
@@ -51,34 +51,9 @@ learn_data <- learn_data %>%
 learn_data$ID_num <- as.numeric(as.factor(learn_data$ID))
 ```
 
-### % optimal choice as function of time on task
-
-```{r}
-bin_size = 10
-learn_data %>%
-  mutate(trial_bin = case_when(
-    learn_trial_n < bin_size + 1 ~ 1,
-    learn_trial_n < bin_size*2 + 1 ~ 2,
-    learn_trial_n < bin_size*3 + 1 ~ 3,
-    learn_trial_n < bin_size*4 + 1 ~ 4,
-    learn_trial_n < bin_size*5 + 1 ~ 5,
-    learn_trial_n < bin_size*6 + 1 ~ 6,
-    learn_trial_n < bin_size*7 + 1 ~ 7,
-    learn_trial_n < bin_size*8 + 1 ~ 8,
-    learn_trial_n < bin_size*9 + 1 ~ 9,
-    TRUE ~ 10
-  )) %>%
-  group_by(ID, trial_bin, condition) %>%
-  summarise(p_optimal = sum(optimal_choice)/bin_size)%>%
-  mutate(trial_bin = as.factor(trial_bin))%>%
-  ggplot(aes(x = trial_bin, y = p_optimal))+
-  geom_boxplot(aes(color = condition))
-  
-```
-
 ## model-based analysis of choice data
 
-We can try fitting the model with a delta learning rule for reward updating.
+We can try fitting the model with a delta learning rule (same learning rate on every trial for a given subject) or bayesian learning rule (adaptive learning rate based on estimate uncertainty) for reward updating. For the choice rule, we can model a simple softmax choice rule with an inverse temperature parameter that governs how much a participant relies on estimated values of the options when making choices, and also add in additional parameters such as directed exploration bonus (how much a participant makes choices to resolve uncertainty about the reward estimate of options) and perserveration bonus (how much a participant tends to repeat their choice on the last trial).
 
 We expect that participants in the interrogative condition would have greater directed exploration compared to participants in the imperative condition, while the other parameters would not necessarily differ. We can model them as two separate populations and estimate the *difference* in directed exploration, random exploration, and perserveration free parameters between the two groups.
 
@@ -90,7 +65,7 @@ rstan_options(auto_write = TRUE)
 ```
 
 ```{r}
-# compute exploration bonus for delta learning rule
+# compute exploration bonus for delta learning rule: scales linearly with the time it's been since an option was last chosen
 exploration_bonus <- data.frame(matrix(nrow = nrow(learn_data), ncol = 4))
 for (t in 1:(nrow(learn_data)-1)){
   if(learn_data$learn_trial_n[t]==1){
@@ -148,70 +123,130 @@ bayes_data_list_1 <- list(
 )
 ```
 
-fit observed data to the simple delta learning model (no exploration bonus or perserveration):
 
-```{r delta_SM}
-learn_data_list_delta_SM <- list(
-             totalTrials = nrow(learn_data),
-             nSubjects = length(unique(learn_data$ID)),
-             subject = learn_data$ID_num,
-             trialNum = learn_data$learn_trial_n,
-             choices = learn_data$chosen_door_num,
-             rewards = learn_data$reward,
-             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
-             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
-             )
-# run on Cerberus
+## model comparison
 
-learn_fit_delta_SM_cond_diffpriors <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/learn_fit_delta_SM_cond_diffpriors.rds")
-
-print(learn_fit_delta_SM_cond_diffpriors, pars = c("eta_mu","eta_sigma","alpha_mu", "alpha_sigma","beta_mu","beta_sigma", "alpha_mu_diff", "beta_mu_diff","eta_mu_diff"))
-```
-
-This model works, both with tighter priors and more diffuse priors (delta_SM_cond_diffpriors.stan). fitted objects are saved on cerberus.
-
-Now, we can look at the estimated group differences in learning rate and inverse temperature:
+6 models were fit to the choice data on Cerberus (Bayesian learning rule or delta learning rule, estimated value only choice rule or with the addition of directed exploration bonus or both directed exploration and perserveration bonus). We can use leave-one-out cross validation estimates to compare the predictive accuracies of different models.
 
 ```{r}
-plot(learn_fit_delta_SM_cond_diffpriors, pars = c("alpha_mu_diff","beta_mu_diff"))
+library(loo)
+loo_delta_SM <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/loo_learn_fit_delta_SM.rds")
+loo_delta_SME <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/loo_learn_fit_delta_SME.rds")
+loo_delta_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/loo_learn_fit_delta_SMEP.rds")
+loo_bayes_SM <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/loo_learn_fit_bayes_SM.rds")
+loo_bayes_SME <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/loo_learn_fit_bayes_SME.rds")
+loo_bayes_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/loo_learn_fit_bayes_SMEP.rds")
+
+# use the loo_compare function to compare multiple models on expected log predictive density (ELPD) for new data:
+loo_compare(loo_delta_SM, loo_delta_SME, loo_delta_SMEP, loo_bayes_SM, loo_bayes_SME, loo_bayes_SMEP)
+
+log_likelihoods <- data.frame(matrix(nrow = 6, ncol = 2))
+colnames(log_likelihoods) <- c("model_name","elpd")
+log_likelihoods$model_name[1] <- "delta-SM"
+log_likelihoods$elpd[1] <- loo_delta_SM$estimates[1]
+log_likelihoods$model_name[2] <- "delta-SME"
+log_likelihoods$elpd[2] <- loo_delta_SME$estimates[1]
+log_likelihoods$model_name[3] <- "delta-SMEP"
+log_likelihoods$elpd[3] <- loo_delta_SMEP$estimates[1]
+log_likelihoods$model_name[4] <- "bayes-SM"
+log_likelihoods$elpd[4] <- loo_bayes_SM$estimates[1]
+log_likelihoods$model_name[5] <- "bayes-SME"
+log_likelihoods$elpd[5] <- loo_bayes_SME$estimates[1]
+log_likelihoods$model_name[6] <- "bayes-SMEP"
+log_likelihoods$elpd[6] <- loo_bayes_SMEP$estimates[1]
+# divide by the total number of data points in the sample (n*t)
+log_likelihoods <- log_likelihoods %>%
+  mutate(elpd_div_trial = elpd/nrow(learn_data))
+
+# plot
+levels_order <- c("delta-SM","bayes-SM","delta-SME","bayes-SME","delta-SMEP","bayes-SMEP")
+log_likelihoods %>%
+  ggplot(aes(x = factor(model_name, level = levels_order), y = elpd_div_trial))+
+  geom_bar(stat="identity")+
+  ylab("loo log-likelihood")+
+  xlab("")
+
+
 ```
 
-At the group level, participants in the imperative condition had higher learning rates than those in the interrogative condition.
+The Bayesian learning model with terms for directed exploration and perseveration (bayes-SMEP) showed highest predictive accuracy. This is the winning model with which the following analyses are conducted.
 
-Now, we can add in another free parameter for the directed exploration bonus. 
+## group differences 
 
-```{r delta_SME}
-
-```
-
-### classify choice type based on model-derived expected values
-
-We can classify whether a trial is exploitative or exploratory based on the model-estiamted Q value, and whether it is directed exploration (choosing the choice with the most uncertainty) or random exploration based on choice history.
+We can look at group differences in inverse temperature (beta), directed exploration (phi), and perserveration (persev) by examining the corresponding hyperparameters.
 
 ```{r}
-# extract Q value
-delta_SM_Q_summary <- summary(learn_fit_delta_SM_cond_diffpriors, pars = c("Q"), probs = c(0.1, 0.9))$summary
-delta_SM_Q_summary <- delta_SM_Q_summary[,"mean"]
-delta_SM_Q_summary <- matrix(delta_SM_Q_summary, nrow = nrow(learn_data), byrow = T)
-delta_SM_Q_summary <- as.data.frame(delta_SM_Q_summary)
-delta_SM_Q_summary <- delta_SM_Q_summary %>%
-  cbind(max_Q_choice = max.col(delta_SM_Q_summary, 'first'))
+bayes_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/bayes_SMEP_samples_selectparams.rds")
+library(ggdist)
+# make dataframes for hyperparamters
+beta_mu_diff <- as.data.frame(bayes_SMEP$beta_mu_diff)
+colnames(beta_mu_diff) <- "beta_mu_diff_draws"
+phi_mu_diff <- as.data.frame(bayes_SMEP$phi_mu_diff)
+colnames(phi_mu_diff) <- "phi_mu_diff_draws"
+persev_mu_diff <- as.data.frame(bayes_SMEP$persev_mu_diff)
+colnames(persev_mu_diff) <- "persev_mu_diff_draws"
 
-# append columns needed 
-exploration_bonus <- exploration_bonus %>%
-  cbind(dir_expl_choice = max.col(exploration_bonus, 'first'))
-exploration_bonus$learn_trial_n <- learn_data$learn_trial_n
-exploration_bonus$subject <- learn_data$ID_num
-exploration_bonus$condition <- as.factor(learn_data$condition)
-exploration_bonus$reward_list <- as.factor(learn_data$reward_list)
+# make plots
+beta_mu_diff %>%
+  ggplot(aes(x = beta_mu_diff_draws)) +
+  # point estimate = mean; high density continuous interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+ 
+  geom_vline(xintercept = 0, color = "grey")+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlab("hyperparameter posterior for group difference in inverse temperature")
+
+phi_mu_diff %>%
+  ggplot(aes(x = phi_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "grey")+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlab("hyperparameter posterior for group difference in directed exploration")
+
+persev_mu_diff %>%
+  ggplot(aes(x = persev_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "grey")+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlab("hyperparameter posterior for group difference in perserveration")
+
+```
+
+Participants in the imperative condition made choices based on estimated values of the options to a greater extent compared to those in the interrogative condition, while participants in the interrogative condition tended to make choices to resolve uncertainty to a greater extent than those in the imperative condition. The two groups did not significantly differ in their tendency to repeat their previous choice (95% CI of the posterior spans 0).
+
+# model-derived choice classification
+
+We can classify whether a trial is exploitative or exploratory based on the model-estiamted Q value, and whether it is directed exploration (choosing the choice with the most uncertainty.highest directed exploration bonus) or random exploration (one of the other choices). We can then compare the likelihood of making a choice that falls under these three categories across the two conditions, imperative and interrogative.
+
+```{r}
+# model-estimated Q value 
+bayes_SMEP_Q <- as.data.frame(apply(bayes_SMEP$v, c(2,3), mean))
+bayes_SMEP_Q <- bayes_SMEP_Q %>%
+  cbind(max_Q_choice = max.col(bayes_SMEP_Q, 'first'))
+
+# model-estimated directed exploration bonus 
+bayes_SMEP_eb <- as.data.frame(apply(bayes_SMEP$eb, c(2,3), mean))
+colnames(bayes_SMEP_eb) <- c("eb_1","eb_2","eb_3","eb_4")
+bayes_SMEP_eb <- bayes_SMEP_eb %>%
+  cbind(max_eb_choice = max.col(bayes_SMEP_eb, 'first'))
+
+bayes_SMEP_eb$learn_trial_n <- learn_data$learn_trial_n
+bayes_SMEP_eb$subject <- learn_data$ID_num
+bayes_SMEP_eb$condition <- as.factor(learn_data$condition)
+bayes_SMEP_eb$reward_list <- as.factor(learn_data$reward_list)
   
 # classify choice on each trial 
-choice_classification <- exploration_bonus %>%
+choice_classification <- bayes_SMEP_eb %>%
   cbind(choice = learn_data$chosen_door_num) %>%
-  cbind(delta_SM_Q_summary) %>%
+  cbind(bayes_SMEP_Q) %>%
   mutate(choice_type = case_when(
     choice == max_Q_choice ~ "exploitation",
-    choice == dir_expl_choice ~ "directed_exploration",
+    choice == max_eb_choice ~ "directed_exploration",
     TRUE ~ "random_exploration"
   ),choice_type = as.factor(choice_type))
 
@@ -229,73 +264,6 @@ choice_classification %>%
 library(mclogit)
 mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
 summary(mod)
-
 ```
-
 
 Based on the the multinomial logistic regression, the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
-
-
-```{r}
-# library(cmdstanr)
-# Bayes_SMEP_mod <- cmdstan_model("Bayes_SMEP_cond.stan")
-# 
-# fit_Bayes_SMEP <- Bayes_SMEP_mod$sample(
-#   data = bayes_data_list_1, 
-#   chains = 2, 
-#   parallel_chains = 2,
-#   iter_warmup = 100,          # number of warmup iterations per chain
-#   iter_sampling = 100
-# )
-# fit_Bayes_SMEP$print(c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"))
-# fit_Bayes_SMEP$print(c("beta_diff","phi_diff","perserv_diff"))
-# stanfit <- rstan::read_stan_csv(fit_Bayes_SMEP$output_files())
-
-
-# running MCMC
-fit_Bayes_SMEP_cond <- stan(
-  file = "Bayes_SMEP_cond.stan",  # Stan program
-  data = bayes_data_list_1,    # named list of data
-  chains = 4,             # number of Markov chains
-  warmup = 200,          # number of warmup iterations per chain
-  iter = 700,            # total number of iterations per chain
-  cores = 4
-  )
-
-traceplot(fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"), inc_warmup=T)
-print(fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma", 
-  "beta_diff","phi_diff","persev_diff"))
-stan_hist(fit_Bayes_SMEP_cond, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma", 
-  "beta_diff","phi_diff","persev_diff"))
-loo_fit_Bayes_SMEP_cond <- loo::loo(fit_Bayes_SMEP_cond)
-
-# plot the parameters for difference between conditions
-plot(fit_Bayes_SMEP_cond,show_density = TRUE, pars = "beta_diff")
-plot(fit_Bayes_SMEP_cond,show_density = TRUE, pars = "phi_diff")
-plot(fit_Bayes_SMEP_cond,show_density = TRUE, pars = "persev_diff")
-
-```
-
-There seems to be both a significant difference in beta and persev hyperparameters, where people in the imperative condition tended to place more weight on expected value when making bandit choices (beta), and those in the interrogative condition valued tended to repeat their previous choice (perseveration). However, compared to the values from Chakroun et al., these beta_mu's are really low, persev_mu rather large.
-
-We can try this model again with somewhat less informative priors:
-
-```{r}
-# running MCMC
-fit_Bayes_SMEP_cond_2 <- stan(
-  file = "Bayes_SMEP_cond.stan",  # Stan program
-  data = bayes_data_list_1,    # named list of data
-  chains = 4,             # number of Markov chains
-  warmup = 200,          # number of warmup iterations per chain
-  iter = 700,            # total number of iterations per chain
-  cores = 4
-  )
-
-traceplot(fit_Bayes_SMEP_cond_2, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma"), inc_warmup=T)
-print(fit_Bayes_SMEP_cond_2, pars = c("beta_mu","beta_sigma","phi_mu","phi_sigma","persev_mu","persev_sigma","beta_diff","phi_diff", "persev_diff"), inc_warmup=T)
-```
-
-Different results with different priors...
-
-But, we can try to classify exploit, direct explore, and random explore choices based on the the model-produced Q values and the exploration bonuses, and see if there are significant group differences between the results from different priors.
-
