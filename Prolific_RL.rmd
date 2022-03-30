@@ -260,18 +260,21 @@ choice_classification <- bayes_SMEP_eb %>%
   ),choice_type = as.factor(choice_type))
 
 # plot
+levels_order <- c("exploitation","directed_exploration","random_exploration")
 choice_classification %>%
   group_by(subject, condition) %>%
   count(choice_type) %>%
   ungroup() %>%
   group_by(condition) %>%
-  ggplot(aes(x = choice_type, y = n, color = condition))+
+  ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
   geom_boxplot()+
   stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))+
   theme_allie()+
   scale_color_red_blue("Information Seeking Condition")+
   xlab("")+
-  ylab("number of choices (out of 100 trials)")
+  ylab("number of choices (out of 100 trials)")+
+  scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
+                              "random_exploration" = "random exploration"))
 
 # some stats
 library(mclogit)
