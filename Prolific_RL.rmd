@@ -259,6 +259,9 @@ choice_classification <- bayes_SMEP_eb %>%
     TRUE ~ "random_exploration"
   ),choice_type = as.factor(choice_type))
 
+# merge with learn data
+learn_data_choice_classification <- merge(learn_data, choice_classification, by.x = c("ID_num","learn_trial_n"), by.y = c("subject","learn_trial_n"))
+
 # plot
 levels_order <- c("exploitation","directed_exploration","random_exploration")
 choice_classification %>%
