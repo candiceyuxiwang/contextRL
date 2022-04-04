@@ -174,6 +174,45 @@ log_likelihoods %>%
 
 The Bayesian learning model with terms for directed exploration and perseveration (bayes-SMEP) showed highest predictive accuracy. This is the winning model with which the following analyses are conducted.
 
+## parameter recovery on the winning model
+
+We can simulate a range of values for the group difference hyperparameters of interest (beta_mu_diff and phi_mu_diff) and see if the model is able to recover the true parameters.
+
+```{r}
+# from bandit_sim.rmd
+# the 3rd value is the estimated value from observed data
+beta_mu_diff_sim <- c(0, 0.01, 0.02, 0.03, 0.04)
+phi_mu_diff_sim <- c(-1, -0.75, -0.5, -0.25, 0)
+# the rest of the hyperparameters were set to the values estimated from observed data
+
+# from fitted objects
+beta_1 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_1_params.rds")
+beta_2 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_2_params.rds")
+beta_phi_3 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_phi_persev_3_params.rds")
+beta_4 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_4_params.rds")
+beta_5 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_5_params.rds")
+beta_mu_diff_fit <- c(mean(beta_1$beta_mu_diff), mean(beta_2$beta_mu_diff), mean(beta_phi_3$beta_mu_diff),
+                      mean(beta_4$beta_mu_diff), mean(beta_5$beta_mu_diff))
+
+phi_1 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_1_params.rds")
+phi_2 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_2_params.rds")
+phi_4 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_4_params.rds")
+phi_5 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_5_params.rds")
+phi_mu_diff_fit <- c(mean(phi_1$phi_mu_diff), mean(phi_2$phi_mu_diff), mean(beta_phi_3$phi_mu_diff),
+                      mean(phi_4$phi_mu_diff), mean(phi_5$phi_mu_diff))
+
+# correlation
+agreement_betas <- cor(beta_mu_diff_sim, beta_mu_diff_fit)
+plot(beta_mu_diff_sim, beta_mu_diff_fit, main="Simulated vs. fitted group difference in inverse temperature", xlab="simulated", ylab="fitted")
+print(agreement_betas)
+
+agreement_phis <- cor(phi_mu_diff_sim, phi_mu_diff_fit)
+plot(phi_mu_diff_sim, phi_mu_diff_fit, main="Simulated vs. fitted group differences in directed exploration", xlab="simulated", ylab="fitted")
+print(agreement_phis)
+```
+
+The fitted group difference hyperparameter values are highly correlated with the simulated (true) values. There seems to be a tendency to under-estimate high values of beta (inverse temperature) difference, but this should not be an issue for our hypothesis.
+
 ## group differences 
 
 We can look at group differences in inverse temperature (beta), directed exploration (phi), and perserveration (persev) by examining the corresponding hyperparameters.
@@ -256,6 +295,7 @@ choice_classification <- bayes_SMEP_eb %>%
   mutate(choice_type = case_when(
     choice == max_Q_choice ~ "exploitation",
     choice == max_eb_choice ~ "directed_exploration",
+    #TRUE ~ "a_random_exploration" # to make this the default ref group for multinomial logit regression
     TRUE ~ "random_exploration"
   ),choice_type = as.factor(choice_type))
 

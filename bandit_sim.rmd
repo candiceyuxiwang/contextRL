@@ -90,18 +90,21 @@ Now, we can simulate an agent's choices.
 
 We'll assume an ideal agent following the winning model in [Chakroun et al. 2020](https://elifesciences.org/articles/51260), where expected reward is updated according to a Bayesian learner that implements a Kalman filter, and the choice rule is softmax + exploration bonus (directed exploration) + perseveration bonus.
 
+
 ```{r choice_sim}
 # choice function
+# Note that the equation is the same as the likelihood in Bayes_SMEP_cond.stan, which is a little different from the one in Chakroun et al..
 soft_max <- function(b, val, eb, pb){
-  sumExp <- exp(b * (val[1] + eb[1] +  pb[1])) + exp(b * (val[2] + eb[2] +  pb[2])) +
-    exp(b * (val[3] + eb[3] +  pb[3])) + exp(b * (val[4] + eb[4] +  pb[4]))
-  choiceProb1 <- exp(b * (val[1] + eb[1] +  pb[1]))/sumExp
-  choiceProb2 <- exp(b * (val[2] + eb[2] +  pb[2]))/sumExp
-  choiceProb3 <- exp(b * (val[3] + eb[3] +  pb[3]))/sumExp
-  choiceProb4 <- exp(b * (val[4] + eb[4] +  pb[4]))/sumExp
+  sumExp <- exp(b * val[1] + eb[1] +  pb[1]) + exp(b * val[2] + eb[2] +  pb[2]) +
+    exp(b * val[3] + eb[3] +  pb[3]) + exp(b * val[4] + eb[4] +  pb[4])
+  choiceProb1 <- exp(b * val[1] + eb[1] +  pb[1])/sumExp
+  choiceProb2 <- exp(b * val[2] + eb[2] +  pb[2])/sumExp
+  choiceProb3 <- exp(b * val[3] + eb[3] +  pb[3])/sumExp
+  choiceProb4 <- exp(b * val[4] + eb[4] +  pb[4])/sumExp
   return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
 }
 
+# simulate subject choice data for a given set of subject-level parameters
 sim_subject <- function(beta, phi, persev){
 # randomly select 1 reward schedule instantiation
 instantiation_num <- sample(1:3,1)
@@ -109,10 +112,11 @@ reward_schedule <- get(paste("instantiation_",instantiation_num,sep = ""))[1:tot
   
 # initialize choice, reward, expected value, and observation variance arrays
 instantiation <- rep(instantiation_num, total_trials)
+trial_num <- c(1:total_trials)
 choice <- rep(0,total_trials)
 reward <- rep(0,total_trials)
-pe <- rep(0,total_trials)
-Kgain <- rep(0,total_trials)
+
+
 v <- rep(50,4) # initial value at 50 points; 4 choices
 sigma <- rep(observation_sd, 4)
 
@@ -133,16 +137,16 @@ for (t in 1:total_trials){
   reward[t] <- reward_schedule[t,choice[t]]
   
   # calculate prediction error
-  pe[t] <- reward[t] - v[choice[t]]
+  pe <- reward[t] - v[choice[t]]
   
   # Kalman gain
-  Kgain[t] = sigma[choice[t]]^2 / (sigma[choice[t]]^2 + observation_sd^2)
+  Kgain = sigma[choice[t]]^2 / (sigma[choice[t]]^2 + observation_sd^2)
   
   # posterior variance for the chosen option
-  sigma[choice[t]] = sqrt( (1 - Kgain[t]) * sigma[choice[t]]^2 )
+  sigma[choice[t]] = sqrt( (1 - Kgain) * sigma[choice[t]]^2 )
   
   # expected value update
-  v[choice[t]] = v[choice[t]] + Kgain[t] * pe[t]
+  v[choice[t]] = v[choice[t]] + Kgain * pe
   
   # between-trial update based on gaussian random walk
   v = decay_parameter * v + (1-decay_parameter) * decay_center;  
@@ -152,40 +156,130 @@ for (t in 1:total_trials){
       sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + diffusion_sd^2 );
   }
 }
-return(as.data.frame(cbind(reward, choice,instantiation)))
+return(as.data.frame(cbind(reward, choice,instantiation, trial_num)))
 }
 ```
 
-We can simulate a number of subjects using free parameters drawn from a normal distribution.
+We can simulate a number of subjects using free parameters drawn from a normal distribution, where participants in two conditions can have different hyperparamters.
+
+```{r group_sim}
+Nsub <- 100
+# assign half of the subjects to each condition
+subCondition <- sample(c(rep(2, Nsub/2), rep(1, Nsub/2)))
+
+# fixed hyperparameters based on posteriors from real data
+beta_mu <- 0.06
+phi_mu <- 0.19
+persev_mu <- 0.45
+beta_sigma <- 0.04
+phi_sigma <- 0.78
+persev_sigma <- 0.92
+
+# simulate a range of parameter values for the group differences
+beta_mu_diff <- c(0, 0.01, 0.02, 0.03, 0.04)
+phi_mu_diff <- c(-1, -0.75, -0.5, -0.25, 0)
+persev_mu_diff <- c(-0.8, -0.4, 0, 0.4, 0.8)
+
+# subject-level parameters based on simulated condition
+beta_mat <- matrix(ncol = length(beta_mu_diff), nrow = Nsub)
+phi_mat <- matrix(ncol = length(phi_mu_diff), nrow = Nsub)
+persev_mat <- matrix(ncol = length(persev_mu_diff), nrow = Nsub)
+for (s in 1:Nsub){
+  for (param in 1:length(beta_mu_diff)){
+    if(subCondition[s]==1){
+      beta_mat[s, param] <- rnorm(1, mean = (beta_mu + beta_mu_diff[param]/2), sd = beta_sigma)
+      phi_mat[s, param] <- rnorm(1, mean = (phi_mu + phi_mu_diff[param]/2), sd = phi_sigma)
+      persev_mat[s, param] <- rnorm(1, mean = (persev_mu + persev_mu_diff[param]/2), sd = persev_sigma)
+    }else{
+      beta_mat[s, param] <- rnorm(1, mean = (beta_mu - beta_mu_diff[param]/2), sd = beta_sigma)
+      phi_mat[s, param] <- rnorm(1, mean = (phi_mu - phi_mu_diff[param]/2), sd = phi_sigma)
+      persev_mat[s, param] <- rnorm(1, mean = (persev_mu - persev_mu_diff[param]/2), sd = persev_sigma)
+    }
+  }
+}
+
+# simuluate data for all subjects for different parameters 
+sim_data_all <- function(betas, phis, persevs, data_list_fname){
+  sim_data <- data.frame(matrix(ncol = 5, nrow = total_trials*Nsub))
+  colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation")
+  for (s in 1:Nsub){
+    start_ind <- (s-1)*total_trials+1
+    end_ind <- s*total_trials
+    sub_sim <- sim_subject(betas[s],phis[s],persevs[s])
+    sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
+    sim_data$trialnum[start_ind:end_ind] <- sub_sim$trial_num
+    sim_data$choice[start_ind:end_ind] <- sub_sim$choice
+    sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+    sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
+  }
+  
+  # save data list for Bayes_SMEP_cond.stan
+  data_list <- list(
+             totalTrials = nrow(sim_data), 
+             nSubjects = Nsub, 
+             subject = sim_data$subject, 
+             trialNum = sim_data$trialnum,
+             choices = sim_data$choice, 
+             rewards = sim_data$reward,
+             condition = subCondition)
+  
+  saveRDS(data_list, file = paste0("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_list_", data_list_fname, ".RData", sep = ""))
+}
+
+sim_data_all(beta_mat[,1], phi_mat[,3], persev_mat[,3], "beta_1")
+sim_data_all(beta_mat[,2], phi_mat[,3], persev_mat[,3], "beta_2")
+sim_data_all(beta_mat[,3], phi_mat[,3], persev_mat[,3], "beta_phi_persev_3")
+sim_data_all(beta_mat[,4], phi_mat[,3], persev_mat[,3], "beta_4")
+sim_data_all(beta_mat[,5], phi_mat[,3], persev_mat[,3], "beta_5")
+
+sim_data_all(beta_mat[,3], phi_mat[,1], persev_mat[,3], "phi_1")
+sim_data_all(beta_mat[,3], phi_mat[,2], persev_mat[,3], "phi_2")
+sim_data_all(beta_mat[,3], phi_mat[,4], persev_mat[,3], "phi_4")
+sim_data_all(beta_mat[,3], phi_mat[,5], persev_mat[,3], "phi_5")
+```
+
+We can plot the model-estimated hyperparameter posterior and see if its range covers the true parameter at different values:
 
 ```{r}
-Nsub <- 100
+# from fitted objects
+beta_1 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_1_params.rds")
+beta_2 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_2_params.rds")
+beta_phi_3 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_phi_persev_3_params.rds")
+beta_4 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_4_params.rds")
+beta_5 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_beta_5_params.rds")
 
-# parameter values (based on posterior estimates in Chakroun's winning model)
-#### tweak these to change agent behavior
-betas = rnorm(Nsub, 0.2, 0.1)
-phis = rnorm(Nsub, 1, 0.1)
-persevs = rnorm(Nsub, 5, 1)
+beta_mu_diff_fitted <- data.frame(matrix(nrow = length(beta_1$beta_mu_diff), ncol = 5))
+colnames(beta_mu_diff_fitted) <- c("beta_1", "beta_2", "beta_3", "beta_4", "beta_5")
+beta_mu_diff_fitted$beta_1 <- beta_1$beta_mu_diff
+beta_mu_diff_fitted$beta_2 <- beta_2$beta_mu_diff
+beta_mu_diff_fitted$beta_3 <- beta_phi_3$beta_mu_diff
+beta_mu_diff_fitted$beta_4 <- beta_4$beta_mu_diff
+beta_mu_diff_fitted$beta_5 <- beta_5$beta_mu_diff
+beta_mu_diff_fitted %>%
+  tidyr::pivot_longer(c(beta_1, beta_2, beta_3, beta_4, beta_5)) %>%
+  ggplot(aes(x = value, y = name)) +
+  # point estimate = mean; high density continuous interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")
 
-## two groups of subjects with different phi's (directed exploration parameter)
-phis = c(rnorm(Nsub/2, 1.5, 0.1), rnorm(Nsub/2, 1.0, 0.1))
-sim_cond <- c(rep(2, Nsub/2), rep(1, Nsub/2))
+phi_1 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_1_params.rds")
+phi_2 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_2_params.rds")
+phi_4 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_4_params.rds")
+phi_5 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/param_recov/sim_data_fit_phi_5_params.rds")
 
-# simuluate data for all subjects
-sim_data <- data.frame(matrix(ncol = 5, nrow = total_trials*Nsub))
-colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation")
-for (s in 1:Nsub){
-  start_ind <- (s-1)*total_trials+1
-  end_ind <- s*total_trials
-  sub_sim <- sim_subject(betas[s],phis[s],persevs[s])
-  sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
-  sim_data$trialnum[start_ind:end_ind] <- 1:total_trials
-  sim_data$choice[start_ind:end_ind] <- sub_sim$choice
-  sim_data$reward[start_ind:end_ind] <- sub_sim$reward
-  sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
-}
-
+phi_mu_diff_fitted <- data.frame(matrix(nrow = length(phi_1$phi_mu_diff), ncol = 5))
+colnames(phi_mu_diff_fitted) <- c("phi_1", "phi_2", "phi_3", "phi_4", "phi_5")
+phi_mu_diff_fitted$phi_1 <- phi_1$phi_mu_diff
+phi_mu_diff_fitted$phi_2 <- phi_2$phi_mu_diff
+phi_mu_diff_fitted$phi_3 <- beta_phi_3$phi_mu_diff
+phi_mu_diff_fitted$phi_4 <- phi_4$phi_mu_diff
+phi_mu_diff_fitted$phi_5 <- phi_5$phi_mu_diff
+phi_mu_diff_fitted %>%
+  tidyr::pivot_longer(c(phi_1, phi_2, phi_3, phi_4, phi_5)) %>%
+  ggplot(aes(x = value, y = name)) +
+  # point estimate = mean; high density continuous interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")
 ```
+
 
 We can look at the percentage of optimal choices in simulated subject data:
 
