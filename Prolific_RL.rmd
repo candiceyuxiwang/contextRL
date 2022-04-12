@@ -203,11 +203,11 @@ phi_mu_diff_fit <- c(mean(phi_1$phi_mu_diff), mean(phi_2$phi_mu_diff), mean(beta
 
 # correlation
 agreement_betas <- cor(beta_mu_diff_sim, beta_mu_diff_fit)
-plot(beta_mu_diff_sim, beta_mu_diff_fit, main="Simulated vs. fitted group difference in inverse temperature", xlab="simulated", ylab="fitted")
+plot(beta_mu_diff_sim, beta_mu_diff_fit, main="Simulated vs. estimated group difference in inverse temperature", xlab="simulated", ylab="estimated")
 print(agreement_betas)
 
 agreement_phis <- cor(phi_mu_diff_sim, phi_mu_diff_fit)
-plot(phi_mu_diff_sim, phi_mu_diff_fit, main="Simulated vs. fitted group differences in directed exploration", xlab="simulated", ylab="fitted")
+plot(phi_mu_diff_sim, phi_mu_diff_fit, main="Simulated vs. estimated group differences in directed exploration", xlab="simulated", ylab="estimated")
 print(agreement_phis)
 ```
 
@@ -313,11 +313,12 @@ choice_classification %>%
   geom_boxplot()+
   stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))+
   theme_allie()+
-  scale_color_red_blue("Information Seeking Condition")+
+  scale_color_red_blue("Condition")+
   xlab("")+
   ylab("number of choices (out of 100 trials)")+
   scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
-                              "random_exploration" = "random exploration"))
+                              "random_exploration" = "random exploration"))+
+  ggtitle("Number of Exploitation and Exploration Choices by Condition")
 
 # some stats
 library(mclogit)
