@@ -237,8 +237,9 @@ beta_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
-  xlab("hyperparameter posterior for group difference in inverse temperature")+
+  xlab("inverse temperature")+
   ylab("")+
+  ggtitle("Group Difference (Imperative - Interrogative)\nParameter Estimate Posterior Distributions")+
   theme_allie()
 
 phi_mu_diff %>%
@@ -248,7 +249,7 @@ phi_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
-  xlab("hyperparameter posterior for group difference in directed exploration")+
+  xlab("directed exploration")+
   ylab("")+
   theme_allie()
 
@@ -356,6 +357,84 @@ wilcox.test(imp_randexp$n, int_randexp$n, alternative = "two.sided")
 ```
 
 Based on the the multinomial logistic regression, the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
+
+We can also plot the trial-by-trial model-derived expected value and estimated uncertainty for two example subjects in Interrogative and Imperative conditions that both had the 1st reward list.
+
+```{r}
+#  example Imperative subject choice classification
+Imp_sub_num = 2
+
+Imp_sub_choice_class <- choice_classification %>%
+  filter(subject == Imp_sub_num) %>%
+  # calculate estimated uncertainty from exploration bonus and phi posterior
+  mutate(uncertainty_1 = eb_1/colMeans(bayes_SMEP$phi)[Imp_sub_num],
+         uncertainty_2 = eb_2/colMeans(bayes_SMEP$phi)[Imp_sub_num],
+         uncertainty_3 = eb_3/colMeans(bayes_SMEP$phi)[Imp_sub_num],
+         uncertainty_4 = eb_4/colMeans(bayes_SMEP$phi)[Imp_sub_num]) 
+
+# plot trial by trial expected value
+Imp_sub_choice_class %>%
+  ggplot(aes(x = learn_trial_n))+
+  geom_line(aes(y = V1), color = door_key[1])+
+  geom_line(aes(y = V2), color = door_key[2])+
+  geom_line(aes(y = V3), color = door_key[3])+
+  geom_line(aes(y = V4), color = door_key[4])+
+  theme_allie()+
+  xlab("Trial #")+
+  ylab("Expected Value")+
+  ggtitle("Model-Derived Expected Value (Interrogative)")+
+  ylim(0,100)
+
+# plot trial by trial estimated uncertainty
+Imp_sub_choice_class %>%
+  ggplot(aes(x = learn_trial_n))+
+  geom_line(aes(y = uncertainty_1), color = door_key[1])+
+  geom_line(aes(y = uncertainty_2), color = door_key[2])+
+  geom_line(aes(y = uncertainty_3), color = door_key[3])+
+  geom_line(aes(y = uncertainty_4), color = door_key[4])+
+  theme_allie()+
+  xlab("Trial #")+
+  ylab("Estimated Uncertainty")+
+  ggtitle("Model-Derived Estimated Uncertainty (Interrogative)")+
+  ylim(0,15)
+
+# example Interrogative subject choice classification
+Int_sub_num = 3
+
+Int_sub_choice_class <- choice_classification %>%
+  filter(subject == Int_sub_num) %>%
+  # calculate estimated uncertainty from exploration bonus and phi posterior
+  mutate(uncertainty_1 = eb_1/colMeans(bayes_SMEP$phi)[Int_sub_num],
+         uncertainty_2 = eb_2/colMeans(bayes_SMEP$phi)[Int_sub_num],
+         uncertainty_3 = eb_3/colMeans(bayes_SMEP$phi)[Int_sub_num],
+         uncertainty_4 = eb_4/colMeans(bayes_SMEP$phi)[Int_sub_num]) 
+
+# plot trial by trial expected value
+Int_sub_choice_class %>%
+  ggplot(aes(x = learn_trial_n))+
+  geom_line(aes(y = V1), color = door_key[1])+
+  geom_line(aes(y = V2), color = door_key[2])+
+  geom_line(aes(y = V3), color = door_key[3])+
+  geom_line(aes(y = V4), color = door_key[4])+
+  theme_allie()+
+  xlab("Trial #")+
+  ylab("Expected Value")+
+  ggtitle("Model-Derived Expected Value (Interrogative)")+
+  ylim(0,100)
+
+# plot trial by trial estimated uncertainty
+Int_sub_choice_class %>%
+  ggplot(aes(x = learn_trial_n))+
+  geom_line(aes(y = uncertainty_1), color = door_key[1])+
+  geom_line(aes(y = uncertainty_2), color = door_key[2])+
+  geom_line(aes(y = uncertainty_3), color = door_key[3])+
+  geom_line(aes(y = uncertainty_4), color = door_key[4])+
+  theme_allie()+
+  xlab("Trial #")+
+  ylab("Estimated Uncertainty")+
+  ggtitle("Model-Derived Estimated Uncertainty (Interrogative)")+
+  ylim(0,15)
+```
 
 ## individual parameter estimates
 
