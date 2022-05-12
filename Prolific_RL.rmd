@@ -237,9 +237,10 @@ beta_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
+  xlim(c(-0.06,0.06))+
   xlab("inverse temperature")+
   ylab("")+
-  ggtitle("Group Difference (Imperative - Interrogative)\nParameter Estimate Posterior Distributions")+
+  ggtitle("More Exploitation in the Imperative Condition")+
   theme_allie()
 
 phi_mu_diff %>%
@@ -249,8 +250,10 @@ phi_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
+  xlim(c(-1,1))+
   xlab("directed exploration")+
   ylab("")+
+  ggtitle("More Directed Exploration in the Interrogative Condition")+
   theme_allie()
 
 persev_mu_diff %>%
@@ -361,6 +364,9 @@ Based on the the multinomial logistic regression, the interrogative group made m
 We can also plot the trial-by-trial model-derived expected value and estimated uncertainty for two example subjects in Interrogative and Imperative conditions that both had the 1st reward list.
 
 ```{r}
+# door colors: red blue purple yellow
+door_colors = c("#BD431E", "#3772C6", "#8368C7", "#F6C34C")
+
 #  example Imperative subject choice classification
 Imp_sub_num = 2
 
@@ -375,28 +381,28 @@ Imp_sub_choice_class <- choice_classification %>%
 # plot trial by trial expected value
 Imp_sub_choice_class %>%
   ggplot(aes(x = learn_trial_n))+
-  geom_line(aes(y = V1), color = door_key[1])+
-  geom_line(aes(y = V2), color = door_key[2])+
-  geom_line(aes(y = V3), color = door_key[3])+
-  geom_line(aes(y = V4), color = door_key[4])+
+  geom_line(aes(y = V1), color = door_colors[1])+
+  geom_line(aes(y = V2), color = door_colors[2])+
+  geom_line(aes(y = V3), color = door_colors[3])+
+  geom_line(aes(y = V4), color = door_colors[4])+
   theme_allie()+
   xlab("Trial #")+
   ylab("Expected Value")+
-  ggtitle("Model-Derived Expected Value (Interrogative)")+
+  ggtitle("Model-Derived Expected Value (Imperative)")+
   ylim(0,100)
 
 # plot trial by trial estimated uncertainty
 Imp_sub_choice_class %>%
   ggplot(aes(x = learn_trial_n))+
-  geom_line(aes(y = uncertainty_1), color = door_key[1])+
-  geom_line(aes(y = uncertainty_2), color = door_key[2])+
-  geom_line(aes(y = uncertainty_3), color = door_key[3])+
-  geom_line(aes(y = uncertainty_4), color = door_key[4])+
+  geom_line(aes(y = uncertainty_1), color = door_colors[1])+
+  geom_line(aes(y = uncertainty_2), color = door_colors[2])+
+  geom_line(aes(y = uncertainty_3), color = door_colors[3])+
+  geom_line(aes(y = uncertainty_4), color = door_colors[4])+
   theme_allie()+
   xlab("Trial #")+
   ylab("Estimated Uncertainty")+
-  ggtitle("Model-Derived Estimated Uncertainty (Interrogative)")+
-  ylim(0,15)
+  ggtitle("Model-Derived Estimated Uncertainty (Imperative)")+
+  ylim(3,15)
 
 # example Interrogative subject choice classification
 Int_sub_num = 3
@@ -412,28 +418,28 @@ Int_sub_choice_class <- choice_classification %>%
 # plot trial by trial expected value
 Int_sub_choice_class %>%
   ggplot(aes(x = learn_trial_n))+
-  geom_line(aes(y = V1), color = door_key[1])+
-  geom_line(aes(y = V2), color = door_key[2])+
-  geom_line(aes(y = V3), color = door_key[3])+
-  geom_line(aes(y = V4), color = door_key[4])+
+  geom_line(aes(y = V1), color = door_colors[1])+
+  geom_line(aes(y = V2), color = door_colors[2])+
+  geom_line(aes(y = V3), color = door_colors[3])+
+  geom_line(aes(y = V4), color = door_colors[4])+
   theme_allie()+
   xlab("Trial #")+
   ylab("Expected Value")+
-  ggtitle("Model-Derived Expected Value (Interrogative)")+
+  ggtitle("Model-Derived Expected Value (example Interrogative participant)")+
   ylim(0,100)
 
 # plot trial by trial estimated uncertainty
 Int_sub_choice_class %>%
   ggplot(aes(x = learn_trial_n))+
-  geom_line(aes(y = uncertainty_1), color = door_key[1])+
-  geom_line(aes(y = uncertainty_2), color = door_key[2])+
-  geom_line(aes(y = uncertainty_3), color = door_key[3])+
-  geom_line(aes(y = uncertainty_4), color = door_key[4])+
+  geom_line(aes(y = uncertainty_1), color = door_colors[1])+
+  geom_line(aes(y = uncertainty_2), color = door_colors[2])+
+  geom_line(aes(y = uncertainty_3), color = door_colors[3])+
+  geom_line(aes(y = uncertainty_4), color = door_colors[4])+
   theme_allie()+
   xlab("Trial #")+
   ylab("Estimated Uncertainty")+
-  ggtitle("Model-Derived Estimated Uncertainty (Interrogative)")+
-  ylim(0,15)
+  ggtitle("Model-Derived Estimated Uncertainty (example Interrogative participant)")+
+  ylim(3,15)
 ```
 
 ## individual parameter estimates
