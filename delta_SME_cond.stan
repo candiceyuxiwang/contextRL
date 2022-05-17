@@ -89,9 +89,7 @@ model {
   phi_raw ~ normal(0,1);
   
   for (t in 1:totalTrials){
-    if (choices[t] != 0){ // adding this to avoid issues with missed trials
       choices[t] ~ categorical_logit(beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t]); // the probability of the choices on each trial given utilities and exploration bonus
-    }
   }
 }
 
@@ -128,9 +126,7 @@ generated quantities{
   alpha_sigma = sd(alpha);
   
   for (t in 1:totalTrials){
-    if (choices[t] != 0){ // adding this to avoid issues with missed trials
       log_lik[t] = categorical_logit_lpmf(choices[t] | (beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t]));
-    }
   }
   
 }

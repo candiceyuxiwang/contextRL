@@ -1,8 +1,7 @@
 //
 // This Stan program defines a RL model with a Bayesian learning rule
 // and a standard softmax choice rule with an additional exploration bonus that 
-// scales with the estimated uncertainty of the chosen arm and a perservaration
-// bonus that advantages the arm chosen on the immediate last trial. 
+// scales with the estimated uncertainty of the chosen arm. 
 // Parameters are estimated hierarchically for participants in each condition.
 //
 
@@ -17,7 +16,7 @@ data {
   int<lower=1, upper=2> condition[nSubjects]; // 1 = imperative, 2 = interrogative
   }
   
-// fixed paramteres from Chakroun et al., 2020
+// fixed parameters from Chakroun et al., 2020
 transformed data {
   real<lower=0, upper=100> v1;
   real<lower=0> sig1;
@@ -43,13 +42,10 @@ parameters {
   real phi_mu; // hyperparameter for the mean of phi (directed exploration bonus)
   real phi_mu_diff;
   real<lower=0> phi_sigma; // hyperparameter for the standard deviation of distribution of phi parameters
- // real persev_mu; // hyperparameter for perserveration
- // real persev_mu_diff;
- // real<lower=0> persev_sigma;
   
   vector[nSubjects] beta_raw;
   vector[nSubjects] phi_raw;
- // vector[nSubjects] persev_raw;
+
 }
 
 // Transformed parameters (for things that don't need priors; for ease of inserting into likelihood)
@@ -58,24 +54,20 @@ transformed parameters {
   vector[totalTrials] Kgain; // kalman gain
   vector[4] eb[totalTrials]; // exploration bonus   
   
-//  vector[4] pb;  // perseveration bonus
   vector[4] v[totalTrials];   // value (mu)
   vector<lower=0>[4] sig; // sigma
   
-  // actual beta, phi, and persev parameters, determined by mu and sigma hyperparameters
+  // actual beta and phi parameters, determined by mu and sigma hyperparameters
   vector[nSubjects] beta;
   vector[nSubjects] phi;
- // vector[nSubjects] persev;
  
   for (s in 1:nSubjects){
     if(condition[s]==1){
       beta[s] = beta_mu + beta_mu_diff/2 + beta_sigma * beta_raw[s];
       phi[s] = phi_mu + phi_mu_diff/2 + phi_sigma * phi_raw[s];
-     // persev[s] = persev_mu + persev_mu_diff/2 + persev_sigma * persev_raw[s];
     }else{
       beta[s] = beta_mu - beta_mu_diff/2 + beta_sigma * beta_raw[s];
       phi[s] = phi_mu - phi_mu_diff/2 + phi_sigma * phi_raw[s];
-     // persev[s] = persev_mu - persev_mu_diff/2 + persev_sigma * persev_raw[s];
     }  }
   
   for (t in 1:totalTrials){
@@ -107,17 +99,6 @@ transformed parameters {
 }
 
 model {
-  // using priors from the estimated posteriors from Chakroun et al. 2020
-  // beta_mu ~ normal(0.2,0.1); 
-  // beta_sigma ~ normal(0.1,0.1); 
-  // phi_mu ~ normal(1,0.1);
-  // phi_sigma ~ normal(0.7,0.1);
-  // persev_mu ~ normal(5,1);
-  // persev_sigma ~ normal(0.1,0.2);
-  // 
-  // beta_raw ~ normal(0,0.1);
-  // phi_raw ~ normal(0,0.1);
-  // persev_raw ~ normal(0,1);
   
   beta_mu ~ normal(0,1); 
   beta_mu_diff ~ normal(0,1);
@@ -125,26 +106,12 @@ model {
   phi_mu ~ normal(0,1);
   phi_mu_diff ~ normal(0,1);
   phi_sigma ~ normal(0,1);
- // persev_mu ~ normal(0,1);
- // persev_mu_diff ~ normal(0,1);
- // persev_sigma ~ normal(0,1);
   
   beta_raw ~ normal(0,1);
   phi_raw ~ normal(0,1);
- // persev_raw ~ normal(0,1);
-  
+ 
   for (t in 1:totalTrials){
-  //  vector[4] pb;  // perseveration bonus
-  //  if (choices[t] != 0){ // adding this to avoid issues with missed trials
-  //    pb = rep_vector(0.0, 4);
-  //    if (trialNum[t]>1) {
-          //if (choices[t-1] !=0) {
-  //          pb[choices[t-1]] = persev[subject[t]];
-          //} 
-   //   }
-  //    choices[t] ~ categorical_logit(beta[subject[t]] * (v[t] + eb[t] + pb)); // the probability of the choices on each trial given utilities and exploration bonus
-      choices[t] ~ categorical_logit(beta[subject[t]] * v[t] + eb[t]);
- //   }
+        choices[t] ~ categorical_logit(beta[subject[t]] * v[t] + eb[t]);
   }
 
 }
@@ -152,15 +119,9 @@ model {
 generated quantities{
   //log_lik
   vector[totalTrials] log_lik; // log likelihood for model comparison
- // vector[4] pb;
 
 
   for (t in 1:totalTrials){
-  //    pb = rep_vector(0.0, 4);
-  //    if (trialNum[t]>1) {
-  //       pb[choices[t-1]] = persev[subject[t]];
-  //    }
-   //   log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * (v[t] + eb[t] + pb));
    log_lik[t] = categorical_logit_lpmf(choices[t] | beta[subject[t]] * v[t] + eb[t]);
   }
 

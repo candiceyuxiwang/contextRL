@@ -74,9 +74,7 @@ transformed parameters {
       for (arm in 1:4){
         Q[t][arm] = Q[t-1][arm]; // inherit previous value
       }
-      //if (choices[t-1] != 0){ // if the previous trial was not a missed trial, update estimated reward and perserv bonus
-       Q[t][choices[t-1]] = Q[t-1][choices[t-1]] + inv_logit(eta[subject[t]]) * (rewards[t-1] - Q[t-1][choices[t-1]]);
-      //}
+        Q[t][choices[t-1]] = Q[t-1][choices[t-1]] + inv_logit(eta[subject[t]]) * (rewards[t-1] - Q[t-1][choices[t-1]]);
     }
   }
 }
@@ -109,9 +107,7 @@ model {
       // if this is not the first trial, update the perserveration bonus based on the last choice
       pb[choices[t-1]] = persev[subject[t]];
     }
-   // if (choices[t] != 0){ // adding this to avoid issues with missed trials
       choices[t] ~ categorical_logit(beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t] + pb); // the probability of the choices on each trial given utilities and exploration bonus
-   // }
   }
 }
 
@@ -156,9 +152,7 @@ generated quantities{
       // if this is not the first trial, update the perserveration bonus based on the last choice
       pb[choices[t-1]] = persev[subject[t]];
     }
-    //if (choices[t] != 0){ // adding this to avoid issues with missed trials
       log_lik[t] = categorical_logit_lpmf(choices[t] | (beta[subject[t]] * Q[t] + phi[subject[t]] * eb[t] + pb));
-    //}
   }
   
 }

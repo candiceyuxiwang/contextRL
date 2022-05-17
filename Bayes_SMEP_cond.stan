@@ -17,7 +17,7 @@ data {
   int<lower=1, upper=2> condition[nSubjects]; // 1 = imperative, 2 = interrogative
   }
   
-// fixed paramteres from Chakroun et al., 2020
+// fixed parameters from Chakroun et al., 2020
 transformed data {
   real<lower=0, upper=100> v1;
   real<lower=0> sig1;
@@ -47,7 +47,7 @@ parameters {
   real persev_mu_diff;
   real<lower=0> persev_sigma;
   
-  vector[nSubjects] beta_raw;
+  vector[nSubjects] beta_raw; // for decentering the subject-level parameters
   vector[nSubjects] phi_raw;
   vector[nSubjects] persev_raw;
 }
@@ -67,7 +67,7 @@ transformed parameters {
   vector[nSubjects] phi;
   vector[nSubjects] persev;
  
-  for (s in 1:nSubjects){
+  for (s in 1:nSubjects){ // subject level parameter depending on the condition
     if(condition[s]==1){
       beta[s] = beta_mu + beta_mu_diff/2 + beta_sigma * beta_raw[s];
       phi[s] = phi_mu + phi_mu_diff/2 + phi_sigma * phi_raw[s];
@@ -107,17 +107,6 @@ transformed parameters {
 }
 
 model {
-  // using priors from the estimated posteriors from Chakroun et al. 2020
-  // beta_mu ~ normal(0.2,0.1); 
-  // beta_sigma ~ normal(0.1,0.1); 
-  // phi_mu ~ normal(1,0.1);
-  // phi_sigma ~ normal(0.7,0.1);
-  // persev_mu ~ normal(5,1);
-  // persev_sigma ~ normal(0.1,0.2);
-  // 
-  // beta_raw ~ normal(0,0.1);
-  // phi_raw ~ normal(0,0.1);
-  // persev_raw ~ normal(0,1);
   
   beta_mu ~ normal(0,1); 
   beta_mu_diff ~ normal(0,1);
