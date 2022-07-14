@@ -370,15 +370,27 @@ choice_summary %>%
   ungroup() %>%
   wilcox_effsize(n ~ condition)
 
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "exploitation") %>%
+  ungroup())
+
 choice_summary %>%
   filter(choice_type == "directed_exploration") %>%
   ungroup() %>%
   wilcox_effsize(n ~ condition)
 
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "directed_exploration") %>%
+  ungroup(), pooled_sd = F)
+
 choice_summary %>%
   filter(choice_type == "random_exploration") %>%
   ungroup() %>%
   wilcox_effsize(n ~ condition)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "random_exploration") %>%
+  ungroup())
 ```
 
 Based on the the multinomial logistic regression, the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
