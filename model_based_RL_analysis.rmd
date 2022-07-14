@@ -228,6 +228,12 @@ colnames(phi_mu_diff) <- "phi_mu_diff_draws"
 persev_mu_diff <- as.data.frame(bayes_SMEP$persev_mu_diff)
 colnames(persev_mu_diff) <- "persev_mu_diff_draws"
 
+library(tidybayes)
+tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(persev_mu_diff$persev_mu_diff_draws, .width = 0.95)
+
+
 # make plots
 beta_mu_diff %>%
   ggplot(aes(x = beta_mu_diff_draws)) +
@@ -357,6 +363,22 @@ int_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% f
 # no
 # wilcoxon rank sum test
 wilcox.test(imp_randexp$n, int_randexp$n, alternative = "two.sided")
+
+## effect sizes
+choice_summary %>%
+  filter(choice_type == "exploitation") %>%
+  ungroup() %>%
+  wilcox_effsize(n ~ condition)
+
+choice_summary %>%
+  filter(choice_type == "directed_exploration") %>%
+  ungroup() %>%
+  wilcox_effsize(n ~ condition)
+
+choice_summary %>%
+  filter(choice_type == "random_exploration") %>%
+  ungroup() %>%
+  wilcox_effsize(n ~ condition)
 ```
 
 Based on the the multinomial logistic regression, the interrogative group made more directed exploration choices to resolve uncertainty compared to the imperative group, and the imperative group made more exploitation choices to maximize points gained.
