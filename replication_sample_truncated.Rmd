@@ -1,0 +1,274 @@
+---
+title: "replication_sample_truncated"
+author: "Candice Wang"
+date: "9/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Do we find the same conclusions with the first 50 trials only?
+
+## load choice data
+
+```{r}
+library(dplyr)
+# replication dataset 
+learn_data <- read.csv("context_RL_learn_replication.csv")
+
+#convert door choice into numeric variable
+### door numbers
+door_key <- c("red","blue","purple","yellow")
+learn_data <- learn_data %>%
+    mutate(chosen_door_num = case_when(
+      grepl(door_key[1],chosen_door) ~ 1,
+      grepl(door_key[2],chosen_door) ~ 2,
+      grepl(door_key[3],chosen_door) ~ 3,
+      grepl(door_key[4],chosen_door) ~ 4
+    ))
+learn_data$ID_num <- as.numeric(as.factor(learn_data$ID))
+```
+
+## model-based analysis of choice data
+
+We can try only keeping the first 50 trials.
+
+```{r}
+learn_data <- learn_data %>%
+  filter(learn_trial_n <= 50)
+
+# make data list for stan
+bayes_data_list_1 <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             rewards = learn_data$reward,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))
+)
+
+# save data list to lab server
+saveRDS(bayes_data_list_1, "/Volumes/main2/studies/Context_RL/Analysis/trunc_rep_learn_data_list_bayes.RData")
+
+### model fitting is done on the lab server Cerberus ###
+```
+
+## group differences 
+
+We can look at group differences in inverse temperature (beta), directed exploration (phi), and perserveration (persev) by examining the corresponding hyperparameters.
+
+```{r}
+# posterior draws extracted from fitted object
+bayes_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/trunc_rep_bayes_SMEP_samples_selectparams.rds")
+
+library(ggdist)
+# make dataframes for hyperparamters
+beta_mu_diff <- as.data.frame(bayes_SMEP$beta_mu_diff)
+colnames(beta_mu_diff) <- "beta_mu_diff_draws"
+phi_mu_diff <- as.data.frame(bayes_SMEP$phi_mu_diff)
+colnames(phi_mu_diff) <- "phi_mu_diff_draws"
+persev_mu_diff <- as.data.frame(bayes_SMEP$persev_mu_diff)
+colnames(persev_mu_diff) <- "persev_mu_diff_draws"
+
+library(tidybayes)
+tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(persev_mu_diff$persev_mu_diff_draws, .width = 0.95)
+
+library(ggplot2)
+# make plots
+beta_mu_diff %>%
+  ggplot(aes(x = beta_mu_diff_draws)) +
+  # point estimate = mean; quantile interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+ 
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-0.06,0.06))+
+  xlab("inverse temperature")+
+  ylab("")+
+  theme_allie()
+
+phi_mu_diff %>%
+  ggplot(aes(x = phi_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-1,1))+
+  xlab("directed exploration")+
+  ylab("")+
+  theme_allie()
+
+persev_mu_diff %>%
+  ggplot(aes(x = persev_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlab("hyperparameter posterior for group difference in perserveration")+
+  ylab("")+
+  theme_allie()
+
+```
+
+# model-derived choice classification
+
+We can classify whether a trial is exploitative or exploratory based on the model-estiamted Q value, and whether it is directed exploration (choosing the choice with the most uncertainty.highest directed exploration bonus) or random exploration (one of the other choices). We can then compare the likelihood of making a choice that falls under these three categories across the two conditions, imperative and interrogative.
+
+```{r}
+# model-estimated Q value 
+bayes_SMEP_Q <- as.data.frame(apply(bayes_SMEP$v, c(2,3), mean))
+bayes_SMEP_Q <- bayes_SMEP_Q %>%
+  cbind(max_Q_choice = max.col(bayes_SMEP_Q, 'first'))
+
+# model-estimated directed exploration bonus 
+bayes_SMEP_eb <- as.data.frame(apply(bayes_SMEP$eb, c(2,3), mean))
+colnames(bayes_SMEP_eb) <- c("eb_1","eb_2","eb_3","eb_4")
+bayes_SMEP_eb <- bayes_SMEP_eb %>%
+  cbind(max_eb_choice = max.col(bayes_SMEP_eb, 'first'))
+
+bayes_SMEP_eb$learn_trial_n <- learn_data$learn_trial_n
+bayes_SMEP_eb$subject <- learn_data$ID_num
+bayes_SMEP_eb$condition <- as.factor(learn_data$condition)
+bayes_SMEP_eb$reward_list <- as.factor(learn_data$reward_list)
+  
+# classify choice on each trial 
+choice_classification <- bayes_SMEP_eb %>%
+  cbind(choice = learn_data$chosen_door_num) %>%
+  cbind(bayes_SMEP_Q) %>%
+  mutate(choice_type = case_when(
+    choice == max_Q_choice ~ "exploitation",
+    choice == max_eb_choice ~ "directed_exploration",
+    #TRUE ~ "a_random_exploration" # to make this the default ref group for multinomial logit regression
+    TRUE ~ "random_exploration"
+  ),choice_type = as.factor(choice_type))
+
+# merge with learn data
+learn_data_choice_classification <- merge(learn_data, choice_classification, by.x = c("ID_num","learn_trial_n"), by.y = c("subject","learn_trial_n"))
+
+# plot
+levels_order <- c("exploitation","directed_exploration","random_exploration")
+choice_classification %>%
+  group_by(subject, condition) %>%
+  count(choice_type) %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))+
+  theme_allie()+
+  scale_color_red_blue("Condition")+
+  xlab("")+
+  ylab("number of choices (out of 100 trials)")+
+  scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
+                              "random_exploration" = "random exploration"))+
+  ggtitle("Number of Exploitation and Exploration Choices by Condition")
+
+# some stats
+library(mclogit)
+mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
+summary(mod)
+
+# pairwise comparisons
+choice_summary <- choice_classification %>%
+  group_by(subject,condition) %>%
+  count(choice_type)
+
+imp_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "imperative")
+int_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "interrogative")
+# normal distribution?
+shapiro.test(imp_exploit$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_exploit$n, int_exploit$n, alternative = "two.sided")
+
+imp_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "imperative")
+int_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(int_direxp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_direxp$n, int_direxp$n, alternative = "two.sided")
+
+imp_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "imperative")
+int_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(imp_randexp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_randexp$n, int_randexp$n, alternative = "two.sided")
+
+## effect sizes
+choice_summary %>%
+  filter(choice_type == "exploitation") %>%
+  ungroup() %>%
+  wilcox_effsize(n ~ condition)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "exploitation") %>%
+  ungroup())
+
+choice_summary %>%
+  filter(choice_type == "directed_exploration") %>%
+  ungroup() %>%
+  wilcox_effsize(n ~ condition)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "directed_exploration") %>%
+  ungroup(), pooled_sd = F)
+
+choice_summary %>%
+  filter(choice_type == "random_exploration") %>%
+  ungroup() %>%
+  wilcox_effsize(n ~ condition)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "random_exploration") %>%
+  ungroup())
+```
+
+Same conclusions (except that the difference in directed exploration is now significant with only the first 50 trials, whereas it was trending with the full replication sample), and similar effect sizes.
+
+## individual parameter estimates
+
+We can also get the individual parameter esimates for inverse temperature, directed exploration, and perserveration. 
+
+```{r}
+# get the point estimate (mean) for individual subject level parameters
+betas <- apply(bayes_SMEP$beta, 2, mean)
+phis <- apply(bayes_SMEP$phi, 2, mean)
+persevs <- apply(bayes_SMEP$persev, 2, mean)
+```
+
+Learning rate (Kgain) and prediction error (pe) for each trial:
+
+```{r}
+# learning rate on each trial
+Kgains <- apply(bayes_SMEP$Kgain, 2, mean)
+
+# combine with learn data
+for(row in 1:nrow(learn_data)){
+  learn_data$inverse_temperature[row] <- betas[learn_data$ID_num[row]]
+  learn_data$directed_exploration[row] <- phis[learn_data$ID_num[row]]
+  learn_data$perseveration[row] <- persevs[learn_data$ID_num[row]]
+  learn_data$learning_rate[row] <- Kgains[row]
+}
+
+# prediction error on each trial is received - expected reward for the chosen door 
+for(row in 1:nrow(learn_data)){
+  learn_data$prediction_error[row] <- learn_data$reward[row] - bayes_SMEP_Q[row, learn_data$chosen_door_num[row]]
+}
+
+# append choice type
+learn_data$choice_type <- learn_data_choice_classification$choice_type
+
+# export 
+write.csv(learn_data, file = "/Users/CandiceWang/Documents/CNAP/Projects/contextRL/replication_learn_data_params.csv")
+```
