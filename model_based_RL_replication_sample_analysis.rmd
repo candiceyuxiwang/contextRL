@@ -85,7 +85,6 @@ beta_mu_diff %>%
   xlim(c(-0.06,0.06))+
   xlab("inverse temperature")+
   ylab("")+
-  ggtitle("More Exploitation in the Imperative Condition")+
   theme_allie()
 
 phi_mu_diff %>%
@@ -258,6 +257,9 @@ for(row in 1:nrow(learn_data)){
 for(row in 1:nrow(learn_data)){
   learn_data$prediction_error[row] <- learn_data$reward[row] - bayes_SMEP_Q[row, learn_data$chosen_door_num[row]]
 }
+
+# append choice type
+learn_data$choice_type <- learn_data_choice_classification$choice_type
 
 # export 
 write.csv(learn_data, file = "/Users/CandiceWang/Documents/CNAP/Projects/contextRL/replication_learn_data_params.csv")

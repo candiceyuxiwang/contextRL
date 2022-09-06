@@ -1,5 +1,5 @@
 ---
-title: "replication_sample_truncated"
+title: "truncated data original & replication sample"
 author: "Candice Wang"
 date: "9/2/2022"
 output: html_document
@@ -16,7 +16,11 @@ Do we find the same conclusions with the first 50 trials only?
 ```{r}
 library(dplyr)
 # replication dataset 
-learn_data <- read.csv("context_RL_learn_replication.csv")
+#learn_data <- read.csv("context_RL_learn_replication.csv")
+
+# we can also try it on the original sample
+learn_data <- read.csv("/Volumes/main2/studies/Context_RL/Data/context_RL_learn.csv")
+
 
 #convert door choice into numeric variable
 ### door numbers
@@ -51,7 +55,7 @@ bayes_data_list_1 <- list(
 )
 
 # save data list to lab server
-saveRDS(bayes_data_list_1, "/Volumes/main2/studies/Context_RL/Analysis/trunc_rep_learn_data_list_bayes.RData")
+saveRDS(bayes_data_list_1, "/Volumes/main2/studies/Context_RL/Analysis/trunc_orig_learn_data_list_bayes.RData")
 
 ### model fitting is done on the lab server Cerberus ###
 ```
@@ -62,15 +66,16 @@ We can look at group differences in inverse temperature (beta), directed explora
 
 ```{r}
 # posterior draws extracted from fitted object
-bayes_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/trunc_rep_bayes_SMEP_samples_selectparams.rds")
+#bayes_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/trunc_rep_bayes_SMEP_samples_selectparams.rds")
+bayes_SMEP_orig <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/trunc_orig_bayes_SMEP_samples_selectparams.rds")
 
 library(ggdist)
 # make dataframes for hyperparamters
-beta_mu_diff <- as.data.frame(bayes_SMEP$beta_mu_diff)
+beta_mu_diff <- as.data.frame(bayes_SMEP_orig$beta_mu_diff)
 colnames(beta_mu_diff) <- "beta_mu_diff_draws"
-phi_mu_diff <- as.data.frame(bayes_SMEP$phi_mu_diff)
+phi_mu_diff <- as.data.frame(bayes_SMEP_orig$phi_mu_diff)
 colnames(phi_mu_diff) <- "phi_mu_diff_draws"
-persev_mu_diff <- as.data.frame(bayes_SMEP$persev_mu_diff)
+persev_mu_diff <- as.data.frame(bayes_SMEP_orig$persev_mu_diff)
 colnames(persev_mu_diff) <- "persev_mu_diff_draws"
 
 library(tidybayes)
@@ -124,12 +129,12 @@ We can classify whether a trial is exploitative or exploratory based on the mode
 
 ```{r}
 # model-estimated Q value 
-bayes_SMEP_Q <- as.data.frame(apply(bayes_SMEP$v, c(2,3), mean))
+bayes_SMEP_Q <- as.data.frame(apply(bayes_SMEP_orig$v, c(2,3), mean))
 bayes_SMEP_Q <- bayes_SMEP_Q %>%
   cbind(max_Q_choice = max.col(bayes_SMEP_Q, 'first'))
 
 # model-estimated directed exploration bonus 
-bayes_SMEP_eb <- as.data.frame(apply(bayes_SMEP$eb, c(2,3), mean))
+bayes_SMEP_eb <- as.data.frame(apply(bayes_SMEP_orig$eb, c(2,3), mean))
 colnames(bayes_SMEP_eb) <- c("eb_1","eb_2","eb_3","eb_4")
 bayes_SMEP_eb <- bayes_SMEP_eb %>%
   cbind(max_eb_choice = max.col(bayes_SMEP_eb, 'first'))
@@ -166,7 +171,7 @@ choice_classification %>%
   theme_allie()+
   scale_color_red_blue("Condition")+
   xlab("")+
-  ylab("number of choices (out of 100 trials)")+
+  ylab("number of choices (out of 50 trials)")+
   scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
                               "random_exploration" = "random exploration"))+
   ggtitle("Number of Exploitation and Exploration Choices by Condition")
@@ -234,7 +239,7 @@ effectsize::cohens_d(n~condition, data = choice_summary %>%
   ungroup())
 ```
 
-Same conclusions (except that the difference in directed exploration is now significant with only the first 50 trials, whereas it was trending with the full replication sample), and similar effect sizes.
+Same conclusions (except that the difference in directed exploration is now significant with only the first 50 trials, whereas it was trending with the full replication sample, and for the original sample directed exploration is trending with only the first 50 trials though it was significant with all 100 trials), and similar effect sizes.
 
 ## individual parameter estimates
 
