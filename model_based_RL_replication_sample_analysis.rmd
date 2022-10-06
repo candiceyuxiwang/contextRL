@@ -264,3 +264,82 @@ learn_data$choice_type <- learn_data_choice_classification$choice_type
 # export 
 write.csv(learn_data, file = "/Users/CandiceWang/Documents/CNAP/Projects/contextRL/replication_learn_data_params.csv")
 ```
+
+## differences in overall exploitation or directed exploration between samples?
+
+```{r}
+sample_1_fit <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/learn_fit_bayes_SMEP.rds")
+sample_1_draws <- extract(sample_1_fit, pars = c("beta_mu","phi_mu","persev_mu"))
+sample_2_fit <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/fit_obj/replication_learn_fit_bayes_SMEP.rds")
+sample_2_draws <- extract(sample_2_fit, pars = c("beta_mu","phi_mu","persev_mu"))
+
+# exploitation
+library(tidybayes)
+s1_beta_mu <- as.data.frame(sample_1_draws$beta_mu)
+colnames(s1_beta_mu) <- "beta_mu_draws"
+tidybayes::mean_hdci(s1_beta_mu$beta_mu_draws, .width = 0.95)
+s1_beta_mu %>%
+  ggplot(aes(x = beta_mu_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  #geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(0.03,0.09))+
+  xlab("hyperparameter posterior for overall inverse temperature")+
+  ylab("")+
+  theme_allie()
+s2_beta_mu <- as.data.frame(sample_2_draws$beta_mu)
+colnames(s2_beta_mu) <- "beta_mu_draws"
+tidybayes::mean_hdci(s2_beta_mu$beta_mu_draws, .width = 0.95)
+s2_beta_mu %>%
+  ggplot(aes(x = beta_mu_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  #geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+    xlim(c(0.03,0.09))+
+  xlab("hyperparameter posterior for overall inverse temperature")+
+  ylab("")+
+  theme_allie()
+
+# directed exploration
+s1_phi_mu <- as.data.frame(sample_1_draws$phi_mu)
+colnames(s1_phi_mu) <- "phi_mu_draws"
+tidybayes::mean_hdci(s1_phi_mu$phi_mu_draws, .width = 0.95)
+s1_phi_mu %>%
+  ggplot(aes(x = phi_mu_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  #geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+    xlim(c(-0.1,0.5))+
+  xlab("hyperparameter posterior for overall directed exploration")+
+  ylab("")+
+  theme_allie()
+s2_phi_mu <- as.data.frame(sample_2_draws$phi_mu)
+colnames(s2_phi_mu) <- "phi_mu_draws"
+tidybayes::mean_hdci(s2_phi_mu$phi_mu_draws, .width = 0.95)
+s2_phi_mu %>%
+  ggplot(aes(x = phi_mu_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+ # geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+      xlim(c(-0.1,0.5))+
+  xlab("hyperparameter posterior for overall directed exploration")+
+  ylab("")+
+  theme_allie()
+
+# perseveration
+s1_persev_mu <- as.data.frame(sample_1_draws$persev_mu)
+colnames(s1_persev_mu) <- "persev_mu_draws"
+tidybayes::mean_hdci(s1_persev_mu$persev_mu_draws, .width = 0.95)
+s2_persev_mu <- as.data.frame(sample_2_draws$persev_mu)
+colnames(s2_persev_mu) <- "persev_mu_draws"
+tidybayes::mean_hdci(s2_persev_mu$persev_mu_draws, .width = 0.95)
+```
+
