@@ -408,3 +408,110 @@ for (s in 1:Nsub){
 }
 ```
 
+## within subject 
+
+We can simulate a within-subject experiment where each subject is exposed to both interrogative and imperative conditions, and each subject level parameter is calculated with a mean parameter and a (condition) different parameter, each of which is drawn from a population-level distribution. 
+
+At the motivational context switch point, they start with a different set of options with unknown reward distributions (no memory carry over across conditions).
+
+```{r group_sim}
+Nsub <- 100
+# assign half of the subjects to each condition first (starting condition assignment)
+first_condition <- sample(c(rep(2, Nsub/2), rep(1, Nsub/2)))
+conditions <- c(1,2)
+
+# fixed hyperparameters based on posteriors from real data
+beta_mu_mu <- 0.1
+phi_mu_mu <- 0.05
+persev_mu_mu <- 0.45
+
+beta_mu_sigma <- 0.04
+phi_mu_sigma <- 0.1
+persev_mu_sigma <- 0.92
+
+beta_diff_sigma <- 0.01
+phi_diff_sigma <- 0.1
+persev_diff_sigma <- 0.2
+
+# simulate a range of parameter values for the group differences
+beta_diff_mu <- c(0, 0.01, 0.02, 0.03, 0.04)
+phi_diff_mu <- c(-1, -0.75, -0.5, -0.25, 0)
+persev_diff_mu <- c(-0.8, -0.4, 0, 0.4, 0.8)
+
+# subject-level parameters based on simulated condition
+beta_mat <- matrix(ncol = 2, nrow = Nsub)
+phi_mat <- matrix(ncol = 2, nrow = Nsub)
+persev_mat <- matrix(ncol = 2, nrow = Nsub)
+
+for (s in 1:Nsub){
+  # beta
+  beta_mu_s <- rnorm(1, mean = beta_mu_mu, sd = beta_mu_sigma)
+  beta_diff_s <- rnorm(1, mean = beta_diff_mu[3], sd = beta_diff_sigma) # or an array of beta_diff_mu values
+  # imperative
+  beta_mat[s, 1] <- beta_mu_s + beta_diff_s/2
+  # interrogative
+  beta_mat[s, 2] <- beta_mu_s - beta_diff_s/2
+
+  # phi
+  phi_mu_s <- rnorm(1, mean = phi_mu_mu, sd = phi_mu_sigma)
+  phi_diff_s <- rnorm(1, mean = phi_diff_mu[4], sd = phi_diff_sigma) # or an array of phi_diff_mu values
+  # imperative
+  phi_mat[s, 1] <- phi_mu_s + phi_diff_s/2
+  # interrogative
+  phi_mat[s, 2] <- phi_mu_s - phi_diff_s/2
+  
+  # persev
+  persev_mu_s <- rnorm(1, mean = persev_mu_mu, sd = persev_mu_sigma)
+  persev_diff_s <- rnorm(1, mean = persev_diff_mu[3], sd = persev_diff_sigma) # or an array of persev_diff_mu values
+  # imperative
+  persev_mat[s, 1] <- persev_mu_s + persev_diff_s/2
+  # interrogative
+  persev_mat[s, 2] <- persev_mu_s - persev_diff_s/2
+}
+```
+
+```{r}
+# simuluate data for all subjects for different parameters 
+  total_trials <- 50
+  sim_data <- data.frame(matrix(ncol = 6, nrow = total_trials*2*Nsub))
+  colnames(sim_data) <- c("subject","trialnum","choice","reward","instantiation","condition")
+  for (s in 1:Nsub){
+    # first condition
+    start_ind <- (s-1)*total_trials*2+1
+    end_ind <- start_ind + total_trials - 1
+    sub_sim <- sim_subject(beta_mat[s, first_condition[s]], phi_mat[s, first_condition[s]], persev_mat[s, first_condition[s]])
+    sim_data$condition[start_ind:end_ind] <- rep(first_condition[s], total_trials)
+    sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
+    sim_data$trialnum[start_ind:end_ind] <- sub_sim$trial_num
+    sim_data$choice[start_ind:end_ind] <- sub_sim$choice
+    sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+    sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation
+    # second condition
+    start_ind <- start_ind + total_trials
+    end_ind <- end_ind + total_trials
+    sub_sim <- sim_subject(beta_mat[s, 3-first_condition[s]], phi_mat[s, 3-first_condition[s]], persev_mat[s, 3-first_condition[s]])
+    sim_data$condition[start_ind:end_ind] <- rep((3-first_condition[s]), total_trials)
+    sim_data$subject[start_ind:end_ind] <- rep(s,total_trials)
+    sim_data$trialnum[start_ind:end_ind] <- sub_sim$trial_num
+    sim_data$choice[start_ind:end_ind] <- sub_sim$choice
+    sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+    sim_data$instantiation[start_ind:end_ind] <- sub_sim$instantiation # reward list may repeat but that's ok for now
+  }
+
+```
+
+Assuming there's an effect of condition on exploitation and directed exploration parameters, we can see if the simulated results show difference in task performance and choice behaviors.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+sim_data %>%
+  group_by(subject, condition)%>%
+  summarise(total_reward = sum(reward))%>%
+  ggplot(aes(x = as.factor(condition), y = total_reward))+
+  geom_boxplot()
+```
+
+We can compare model fit for a two-condition model and a one-condition model to see if the within-subject condition manipulation changed critical parameters such as inverse temperature, directed exploration, and perserveration.
+
+
