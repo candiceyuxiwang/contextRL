@@ -1,0 +1,78 @@
+---
+title: "model_based_RL_rev_analysis"
+author: "Candice Wang"
+date: "2023-01-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Combine participants from S1 and S2 into one sample (N=200) since they were run on the same platform with the exact task.
+
+```{r load_data}
+library(dplyr)
+library(ggplot2)
+# read in S1 data 
+learn_data_S1 <- read.csv("/Volumes/main2/studies/Context_RL/Data/context_RL_learn.csv")
+# add reward_list to S1 data
+learn_data_S1$reward_list <- NA
+for (sub in 1:length(unique(learn_data_S1$ID))){
+  if(sub < 39){ # only 92 trials for this subject
+      start_ind <- 100*(sub-1)+1
+      end_ind <- 100*sub
+  }else if(sub == 39){
+      start_ind <- 100*(sub-1)+1
+      end_ind <- 100*sub - 8
+  }else{
+      start_ind <- 100*(sub-1)+1 -8
+      end_ind <- 100*sub -8
+  }
+  
+  if(learn_data_S1$blue_val[learn_data_S1$learn_trial_n==1][sub] == 37.634){
+    learn_data_S1$reward_list[start_ind:end_ind] <- 3
+  }else if(learn_data_S1$blue_val[learn_data_S1$learn_trial_n==1][sub] == 39.894){
+    learn_data_S1$reward_list[start_ind:end_ind] <- 1
+  }else{
+    learn_data_S1$reward_list[start_ind:end_ind] <- 2
+  }
+}
+# numerical subject ID and sample info
+learn_data_S1$ID_num <- as.numeric(as.factor(learn_data_S1$ID))
+learn_data_S1$sample <- 1
+# read in S2 data
+learn_data_S2 <- read.csv("/Volumes/main2/studies/Context_RL/Data/context_RL_learn_replication.csv")
+# add session to S2 data and add numeric subject numbers
+learn_data_S2$ID_num <- as.numeric(as.factor(learn_data_S2$ID))+100
+learn_data_S2$sample <- 2
+# remove extra var in S2
+learn_data_S2 <- learn_data_S2[-c(7)]
+# combine S1+S2 
+learn_df <- rbind(learn_data_S1, learn_data_S2)
+#convert door choice into numeric variable
+### door numbers
+door_key <- c("red","blue","purple","yellow")
+learn_df <- learn_df %>%
+    mutate(chosen_door_num = case_when(
+      grepl(door_key[1],chosen_door) ~ 1,
+      grepl(door_key[2],chosen_door) ~ 2,
+      grepl(door_key[3],chosen_door) ~ 3,
+      grepl(door_key[4],chosen_door) ~ 4
+    ))
+
+# create list for modeling
+bayes_data_list <- list(
+             totalTrials = nrow(learn_df), 
+             nSubjects = length(unique(learn_df$ID)), 
+             subject = learn_df$ID_num, 
+             trialNum = learn_df$learn_trial_n,
+             choices = learn_df$chosen_door_num, 
+             rewards = learn_df$reward,
+             condition = as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1]))
+)
+```
+
+```{r}
+
+```
