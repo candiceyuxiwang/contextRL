@@ -73,6 +73,168 @@ bayes_data_list <- list(
 )
 ```
 
-```{r}
+Bayes_SMEP was the winning model from previous analysis
 
+model-fitting on the Cerberus (rev_analysis/combined_sample_learn_fit_bayes_SMEP.r)
+
+```{r group_diff_params}
+# posterior draws extracted from fitted object
+bayes_SMEP_draws <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_bayes_SMEP_draws.rds")
+
+library(ggdist)
+# make dataframes for hyperparamters
+beta_mu_diff <- as.data.frame(bayes_SMEP_draws$beta_mu_diff)
+colnames(beta_mu_diff) <- "beta_mu_diff_draws"
+phi_mu_diff <- as.data.frame(bayes_SMEP_draws$phi_mu_diff)
+colnames(phi_mu_diff) <- "phi_mu_diff_draws"
+persev_mu_diff <- as.data.frame(bayes_SMEP_draws$persev_mu_diff)
+colnames(persev_mu_diff) <- "persev_mu_diff_draws"
+
+library(tidybayes)
+tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(persev_mu_diff$persev_mu_diff_draws, .width = 0.95)
+
+library(ggplot2)
+# make plots
+beta_mu_diff %>%
+  ggplot(aes(x = beta_mu_diff_draws)) +
+  # point estimate = mean; quantile interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+ 
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-0.06,0.06))+
+  xlab("inverse temperature")+
+  ylab("")+
+  theme_allie()
+
+phi_mu_diff %>%
+  ggplot(aes(x = phi_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-0.6,0.6))+
+  xlab("directed exploration")+
+  ylab("")+
+  theme_allie()
+
+persev_mu_diff %>%
+  ggplot(aes(x = persev_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlab("hyperparameter posterior for group difference in perserveration")+
+  ylab("")+
+  theme_allie()
+```
+
+we can classify choices based on model-estimated expected values and estimated uncertainties
+
+```{r}
+# model-estimated Q value 
+bayes_SMEP_Q <- as.data.frame(apply(bayes_SMEP_draws$v, c(2,3), mean))
+bayes_SMEP_Q <- bayes_SMEP_Q %>%
+  cbind(max_Q_choice = max.col(bayes_SMEP_Q, 'first'))
+
+# model-estimated directed exploration bonus 
+bayes_SMEP_eb <- as.data.frame(apply(bayes_SMEP_draws$eb, c(2,3), mean))
+colnames(bayes_SMEP_eb) <- c("eb_1","eb_2","eb_3","eb_4")
+bayes_SMEP_eb <- bayes_SMEP_eb %>%
+  cbind(max_eb_choice = max.col(bayes_SMEP_eb, 'first'))
+
+bayes_SMEP_eb$learn_trial_n <- learn_df$learn_trial_n
+bayes_SMEP_eb$subject <- learn_df$ID_num
+bayes_SMEP_eb$condition <- as.factor(learn_df$condition)
+bayes_SMEP_eb$reward_list <- as.factor(learn_df$reward_list)
+  
+# classify choice on each trial 
+choice_classification <- bayes_SMEP_eb %>%
+  cbind(choice = learn_df$chosen_door_num) %>%
+  cbind(bayes_SMEP_Q) %>%
+  mutate(choice_type = case_when(
+    choice == max_Q_choice ~ "exploitation",
+    choice == max_eb_choice ~ "directed_exploration",
+    #TRUE ~ "a_random_exploration" # to make this the default ref group for multinomial logit regression
+    TRUE ~ "random_exploration"
+  ),choice_type = as.factor(choice_type))
+
+# merge with learn data
+learn_data_choice_classification <- merge(learn_df, choice_classification, by.x = c("ID_num","learn_trial_n"), by.y = c("subject","learn_trial_n"))
+
+# plot
+levels_order <- c("exploitation","directed_exploration","random_exploration")
+choice_plot <- choice_classification %>%
+  group_by(subject, condition) %>%
+  count(choice_type) %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))+
+  theme_allie()+
+  scale_color_red_blue("Condition")+
+  xlab("")+
+  ylab("number of choices (out of 50 trials)")+
+  scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
+                              "random_exploration" = "random exploration"))+
+  ggtitle("Number of Exploitation and Exploration Choices by Condition")
+choice_plot
+
+# some stats
+library(mclogit)
+mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
+summary(mod)
+
+# pairwise comparisons
+choice_summary <- choice_classification %>%
+  group_by(subject,condition) %>%
+  count(choice_type)
+
+imp_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "imperative")
+int_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "interrogative")
+# normal distribution?
+shapiro.test(imp_exploit$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_exploit$n, int_exploit$n, alternative = "two.sided")
+
+imp_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "imperative")
+int_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(int_direxp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_direxp$n, int_direxp$n, alternative = "two.sided")
+
+imp_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "imperative")
+int_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(imp_randexp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_randexp$n, int_randexp$n, alternative = "two.sided")
+
+## effect sizes
+# choice_summary %>%
+#   filter(choice_type == "exploitation") %>%
+#   ungroup() %>%
+#   wilcox_effsize(n ~ condition)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "exploitation") %>%
+  ungroup())
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "directed_exploration") %>%
+  ungroup(), pooled_sd = F)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "random_exploration") %>%
+  ungroup())
 ```
