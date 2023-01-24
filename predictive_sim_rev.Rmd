@@ -1,0 +1,440 @@
+---
+title: "prior and posterior predictive checks"
+author: "Candice Wang"
+date: "2023-01-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+reward schedules:
+
+```{r reward_schedule}
+# load the values from Chakroun & Mathar et al., 2020
+
+payoffs_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/payoffs1.txt", header = F)
+payoffs_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/payoffs2.txt", header = F)
+payoffs_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/payoffs3.txt", header = F)
+noise_1 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/noise1.txt", header = F)
+noise_2 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/noise2.txt", header = F)
+noise_3 <- read.csv("~/Documents/CNAP/Projects/contextRL_misc/ChakrounMathar2020reward_instantiation/noise3.txt", header = F)
+
+# instantiations = payoffs + random noise
+instantiation_1 <- cbind(payoffs_1$V1 + noise_1, payoffs_1$V2 + noise_1, payoffs_1$V3 + noise_1, payoffs_1$V4 + noise_1)
+colnames(instantiation_1) <- c("V1","V2","V3","V4")
+instantiation_2 <- cbind(payoffs_2$V1 + noise_2, payoffs_2$V2 + noise_2, payoffs_2$V3 + noise_2, payoffs_2$V4 + noise_2)
+colnames(instantiation_2) <- c("V1","V2","V3","V4")
+instantiation_3 <- cbind(payoffs_3$V1 + noise_3, payoffs_3$V2 + noise_3, payoffs_3$V3 + noise_3, payoffs_3$V4 + noise_3)
+colnames(instantiation_3) <- c("V1","V2","V3","V4")
+```
+
+code for simulating bayesian learning rule models
+
+```{r sim_bayes}
+# ### some variables
+total_trials <- 100
+# parameters from Daw 2006
+decay_parameter <- 0.9836
+decay_center <- 50
+observation_sd <- 4
+diffusion_sd <- 2.8
+
+# choice function
+soft_max_bayes <- function(b, val, eb, pb){
+  sumExp <- exp(b * val[1] + eb[1] +  pb[1]) + exp(b * val[2] + eb[2] +  pb[2]) +
+    exp(b * val[3] + eb[3] +  pb[3]) + exp(b * val[4] + eb[4] +  pb[4])
+  choiceProb1 <- exp(b * val[1] + eb[1] +  pb[1])/sumExp
+  choiceProb2 <- exp(b * val[2] + eb[2] +  pb[2])/sumExp
+  choiceProb3 <- exp(b * val[3] + eb[3] +  pb[3])/sumExp
+  choiceProb4 <- exp(b * val[4] + eb[4] +  pb[4])/sumExp
+  return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
+}
+
+# simulate subject choice data for a given set of subject-level parameters
+# for nested models, set phi and/or persev to 0
+sim_subject_bayes <- function(beta, phi, persev){
+  # randomly select 1 reward schedule instantiation
+  instantiation_num <- sample(1:3,1)
+  reward_schedule <- get(paste("instantiation_",instantiation_num,sep = ""))[1:total_trials,]
+  
+  # initialize choice, reward, expected value, and observation variance arrays
+  reward_list <- rep(instantiation_num, total_trials)
+  trial_num <- c(1:total_trials)
+  choice <- rep(0,total_trials)
+  optimal_choice <- rep(0, total_trials)
+  reward <- rep(0,total_trials)
+
+  v <- rep(50,4) # initial value at 50 points; 4 choices
+  sigma <- rep(observation_sd, 4)
+
+  # simulate choices for each trial
+  for (t in 1:total_trials){
+    explo_bonus <- phi * sigma
+    persv_bonus <- rep(0,4)
+  
+    if(t>1){
+      # update perserveration bonus based on last trial's choice
+      persv_bonus[choice[t-1]] <- persev
+    }
+  
+    # simulate choice on trial t based on softmax rule
+    choice[t] <- sample(4, size = 1, prob = soft_max_bayes(beta,v,explo_bonus,persv_bonus))
+    
+    # record whether if this was the best option
+    if(reward_schedule[t, choice[t]] == max(reward_schedule[t,])){
+      optimal_choice[t] <- 1
+    }
+    
+    # get reward from reward schedule based on simulated choice
+    reward[t] <- reward_schedule[t,choice[t]]
+  
+    # calculate prediction error
+    pe <- reward[t] - v[choice[t]]
+  
+    # Kalman gain
+    Kgain = sigma[choice[t]]^2 / (sigma[choice[t]]^2 + observation_sd^2)
+  
+    # posterior variance for the chosen option
+    sigma[choice[t]] = sqrt( (1 - Kgain) * sigma[choice[t]]^2 )
+  
+    # expected value update
+    v[choice[t]] = v[choice[t]] + Kgain * pe
+  
+    # between-trial update based on gaussian random walk
+    v = decay_parameter * v + (1-decay_parameter) * decay_center;  
+  
+    # update obseration variance for all bandits
+    for (j in 1:4) {
+        sigma[j] = sqrt( decay_parameter^2 * sigma[j]^2 + diffusion_sd^2 );
+    }
+  }
+  return(as.data.frame(cbind(trial_num, reward, choice, optimal_choice, reward_list)))
+}
+```
+
+code for simulating delta learning rule models
+
+```{r sim_delta}
+# choice rule
+soft_max_delta <- function(b, val, eb, phi, pb){
+  sumExp <- exp(b*val[1] + eb[1]*phi + pb[1]) + exp(b*val[2] + eb[2]*phi + pb[2]) +
+    exp(b*val[3] + eb[3]*phi + pb[3]) + exp(b*val[4] + eb[4]*phi + pb[4])
+  choiceProb1 <- exp(b*val[1] + eb[1]*phi +  pb[1])/sumExp
+  choiceProb2 <- exp(b*val[2] + eb[2]*phi +  pb[2])/sumExp
+  choiceProb3 <- exp(b*val[3] + eb[3]*phi +  pb[3])/sumExp
+  choiceProb4 <- exp(b*val[4] + eb[4]*phi +  pb[4])/sumExp
+  return(c(choiceProb1,choiceProb2,choiceProb3,choiceProb4))
+}
+
+# simulate subject choice data for a given set of subject-level parameters
+# for nested models, set phi and/or persev to 0
+sim_subject_delta <- function(alpha, beta, phi, persev){
+  # randomly select 1 reward schedule instantiation
+  instantiation_num <- sample(1:3,1)
+  reward_schedule <- get(paste("instantiation_",instantiation_num,sep = ""))[1:total_trials,]
+  
+  # initialize choice, reward, expected value, and observation variance arrays
+  reward_list <- rep(instantiation_num, total_trials)
+  trial_num <- c(1:total_trials)
+  choice <- rep(0,total_trials)
+  reward <- rep(0,total_trials)
+  optimal_choice <- rep(0, total_trials)
+  eb <- matrix(1, total_trials, 4) # initial value at 1
+  v <- rep(50,4) # initial value at 50 points; 4 choices
+
+  # simulate choices for each trial
+  for (t in 1:total_trials){
+    pb <- rep(0,4)
+    if(t>0){
+      # perserveration
+      pb[choice[t-1]] = persev
+  
+    # exploration bonus 
+      for (i in 1:4){
+        # for each arm, see check the last time that it was chosen
+        if(length(which(choice %in% i))==0){
+          eb[t,i] <- t # hasn't been chosen before
+        }else{
+          eb[t,i] <- t - max(which(choice %in% i)) # the number of trials since it was last chosen
+        }
+      }
+    }
+    
+    # simulate choice on trial t based on softmax rule
+    choice[t] <- sample(4, size = 1, prob = soft_max_delta(beta, v, eb[t,], phi, pb))
+    
+    # record whether if this was the best option
+    if(reward_schedule[t, choice[t]] == max(reward_schedule[t,])){
+      optimal_choice[t] <- 1
+    }
+  
+    # get reward from reward schedule based on simulated choice
+    reward[t] <- reward_schedule[t,choice[t]]
+  
+    # calculate prediction error
+    pe <- reward[t] - v[choice[t]]
+  
+    # update expected value based on prediction error and add perserveration bonus
+    v[choice[t]] = v[choice[t]] + alpha*pe
+  
+  }
+  return(as.data.frame(cbind(trial_num, reward, choice, optimal_choice, eb, reward_list)))
+}
+```
+
+Prior predictive checks
+
+```{r sim_params}
+Nsub <- 200
+
+# assign half of the subjects to each condition
+sim_cond <- c(rep(2, Nsub/2), rep(1, Nsub/2))
+
+# make subject-level parameters from hyperparameters
+sub_params_bayes <- function(beta_mu, beta_mu_diff, beta_sigma, phi_mu, phi_mu_diff, phi_sigma, persev_mu, persev_mu_diff, persev_sigma, beta_raw, phi_raw, persev_raw){
+  betas <- rep(0, Nsub)
+  phis <- rep(0, Nsub)
+  persevs <- rep(0, Nsub)
+  for(s in 1:Nsub){
+    if(sim_cond[s]==1){
+      betas[s] <- beta_mu + beta_mu_diff/2 + beta_sigma * beta_raw[s]
+      phis[s] <- phi_mu + phi_mu_diff/2 + phi_sigma * phi_raw[s]
+      persevs[s] <- persev_mu + persev_mu_diff/2 + persev_sigma * persev_raw[s]
+    }else{
+      betas[s] <- beta_mu - beta_mu_diff/2 + beta_sigma * beta_raw[s]
+      phis[s] <- phi_mu - phi_mu_diff/2 + phi_sigma * phi_raw[s]
+      persevs[s] <- persev_mu - persev_mu_diff/2 + persev_sigma * persev_raw[s]
+    }
+  }
+  return(as.data.frame(cbind(betas, phis, persevs)))
+}
+
+sub_params_delta <- function(eta_mu, eta_mu_diff, eta_sigma, beta_mu, beta_mu_diff, beta_sigma, phi_mu, phi_mu_diff, phi_sigma, persev_mu, persev_mu_diff, persev_sigma, eta_raw, beta_raw, phi_raw, persev_raw){
+  etas <- rep(0, Nsub)
+  betas <- rep(0, Nsub)
+  phis <- rep(0, Nsub)
+  persevs <- rep(0, Nsub)
+  for(s in 1:Nsub){
+    if(sim_cond[s]==1){
+      etas[s] <- eta_mu + eta_mu_diff/2 + eta_sigma * eta_raw[s]
+      betas[s] <- beta_mu + beta_mu_diff/2 + beta_sigma * beta_raw[s]
+      phis[s] <- phi_mu + phi_mu_diff/2 + phi_sigma * phi_raw[s]
+      persevs[s] <- persev_mu + persev_mu_diff/2 + persev_sigma * persev_raw[s]
+    }else{
+      etas[s] <- eta_mu - eta_mu_diff/2 + eta_sigma * eta_raw[s]
+      betas[s] <- beta_mu - beta_mu_diff/2 + beta_sigma * beta_raw[s]
+      phis[s] <- phi_mu - phi_mu_diff/2 + phi_sigma * phi_raw[s]
+      persevs[s] <- persev_mu - persev_mu_diff/2 + persev_sigma * persev_raw[s]
+    }
+  }
+  return(as.data.frame(cbind(etas, betas, phis, persevs)))
+}
+```
+
+code for simulation a full dataset and descriptive plots
+
+```{r vis}
+# simuluate data for all subjects for different parameters 
+sim_all_bayes <- function(betas, phis, persevs){
+  sim_data <- data.frame(matrix(ncol = 6, nrow = total_trials*Nsub))
+  colnames(sim_data) <- c("ID_num","learn_trial_n","chosen_door_num","optimal_choice","reward","reward_list")
+  for (s in 1:Nsub){
+    start_ind <- (s-1)*total_trials+1
+    end_ind <- s*total_trials
+    sub_sim <- sim_subject_bayes(betas[s],phis[s],persevs[s])
+    sim_data$ID_num[start_ind:end_ind] <- rep(s,total_trials)
+    sim_data$learn_trial_n[start_ind:end_ind] <- sub_sim$trial_num
+    sim_data$chosen_door_num[start_ind:end_ind] <- sub_sim$choice
+    sim_data$optimal_choice[start_ind:end_ind] <- sub_sim$optimal_choice
+    sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+    sim_data$reward_list[start_ind:end_ind] <- sub_sim$reward_list
+  }
+  return(sim_data)
+}
+
+sim_all_delta <- function(etas, betas, phis, persevs){
+  sim_data <- data.frame(matrix(ncol = 10, nrow = total_trials*Nsub))
+  colnames(sim_data) <- c("ID_num","learn_trial_n","chosen_door_num","optimal_choice","reward","reward_list",
+                          "eb_arm1", "eb_arm2", "eb_arm3", "eb_arm4")
+  for (s in 1:Nsub){
+    start_ind <- (s-1)*total_trials+1
+    end_ind <- s*total_trials
+    sub_sim <- sim_subject_delta(alpha = boot::inv.logit(etas[s]), beta = betas[s], phi = phis[s], persev = persevs[s])
+    sim_data$ID_num[start_ind:end_ind] <- rep(s,total_trials)
+    sim_data$learn_trial_n[start_ind:end_ind] <- sub_sim$trial_num
+    sim_data$chosen_door_num[start_ind:end_ind] <- sub_sim$choice
+    sim_data$optimal_choice[start_ind:end_ind] <- sub_sim$optimal_choice
+    sim_data$reward[start_ind:end_ind] <- sub_sim$reward
+    sim_data$reward_list[start_ind:end_ind] <- sub_sim$reward_list
+    sim_data$eb_arm1[start_ind:end_ind] <- sub_sim$V5
+    sim_data$eb_arm2[start_ind:end_ind] <- sub_sim$V6
+    sim_data$eb_arm3[start_ind:end_ind] <- sub_sim$V7
+    sim_data$eb_arm4[start_ind:end_ind] <- sub_sim$V8
+  }
+  return(sim_data)
+}
+
+# plot functions
+total_reward <- function(df, plot_name){
+  plot <- df %>%
+    mutate(trial_bins = cut(learn_trial_n, breaks = 5))%>%
+    mutate(trial_bins = as.numeric(as.factor(trial_bins)))%>%
+    group_by(ID_num, trial_bins, reward_list) %>%
+    summarise(total_reward = sum(reward)) %>%
+    ggplot(aes(x = as.factor(trial_bins), y = total_reward))+
+    geom_boxplot()+
+    geom_jitter(alpha = 0.5)+
+    xlab("trial bins")+
+    facet_wrap("reward_list")+
+    ggtitle(as.character(plot_name))
+  return(plot)
+}
+
+p_optimal <- function(df, plot_name){
+  plot <- df %>%
+    mutate(trial_bins = cut(learn_trial_n, breaks = 5))%>%
+    mutate(trial_bins = as.numeric(as.factor(trial_bins)))%>%
+    group_by(ID_num, trial_bins, reward_list) %>%
+    summarise(p_optimal = sum(optimal_choice)/n()) %>%
+    ggplot(aes(x = as.factor(trial_bins), y = p_optimal))+
+    geom_boxplot()+
+    geom_jitter(alpha = 0.5)+
+    xlab("trial bins")+
+    facet_wrap("reward_list")+
+    ggtitle(as.character(plot_name))
+  return(plot)
+}
+```
+
+Bayes_SM:
+
+```{r prior_bayes_SM}
+set.seed(1)
+bayes_SM_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,0), phi_mu_diff = rnorm(1,0,0), phi_sigma = abs(rnorm(1,0,0)),
+                                  persev_mu = rnorm(1,0,0), persev_mu_diff = rnorm(1,0,0), persev_sigma = abs(rnorm(1,0,0)),
+                                  beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,0), persev_raw = rnorm(Nsub,0,0))
+bayes_SM_sims <- sim_all_bayes(bayes_SM_pars$betas, bayes_SM_pars$phis, bayes_SM_pars$persevs)
+# total reward
+total_reward(bayes_SM_sims, "Bayes_SM model prior predictive: total reward over time on task")
+
+# p_optimal
+p_optimal(bayes_SM_sims, "Bayes_SM model prior predictive: proportion optimal choice over time on task")
+```
+Bayes_SME:
+
+```{r prior_bayes_SME}
+set.seed(1)
+bayes_SME_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,1), phi_mu_diff = rnorm(1,0,1), phi_sigma = abs(rnorm(1,0,1)),
+                                  persev_mu = rnorm(1,0,0), persev_mu_diff = rnorm(1,0,0), persev_sigma = abs(rnorm(1,0,0)),
+                                  beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,1), persev_raw = rnorm(Nsub,0,0))
+bayes_SME_sims <- sim_all_bayes(bayes_SME_pars$betas, bayes_SME_pars$phis, bayes_SME_pars$persevs)
+# total reward
+total_reward(bayes_SME_sims, "Bayes_SME model prior predictive: total reward over time on task")
+
+# p_optimal
+p_optimal(bayes_SME_sims, "Bayes_SME model prior predictive: proportion optimal choice over time on task")
+```
+
+
+Bayes_SMP:
+
+```{r prior_bayes_SMP}
+set.seed(1)
+bayes_SMP_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,0), phi_mu_diff = rnorm(1,0,0), phi_sigma = abs(rnorm(1,0,0)),
+                                  persev_mu = rnorm(1,0,1), persev_mu_diff = rnorm(1,0,1), persev_sigma = abs(rnorm(1,0,1)),
+                                  beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,0), persev_raw = rnorm(Nsub,0,1))
+bayes_SMP_sims <- sim_all_bayes(bayes_SMP_pars$betas, bayes_SMP_pars$phis, bayes_SMP_pars$persevs)
+# total reward
+total_reward(bayes_SMP_sims, "Bayes_SMP model prior predictive: total reward over time on task")
+
+# p_optimal
+p_optimal(bayes_SMP_sims, "Bayes_SMP model prior predictive: proportion optimal choice over time on task")
+```
+
+
+Bayes_SMEP:
+
+```{r prior_bayes_SMEP}
+set.seed(1)
+bayes_SMEP_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,1), phi_mu_diff = rnorm(1,0,1), phi_sigma = abs(rnorm(1,0,1)),
+                                  persev_mu = rnorm(1,0,1), persev_mu_diff = rnorm(1,0,1), persev_sigma = abs(rnorm(1,0,1)),
+                                  beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,1), persev_raw = rnorm(Nsub,0,1))
+bayes_SMEP_sims <- sim_all_bayes(bayes_SMEP_pars$betas, bayes_SMEP_pars$phis, bayes_SMEP_pars$persevs)
+# total reward
+total_reward(bayes_SMEP_sims, "Bayes_SMEP model prior predictive: total reward over time on task")
+
+# p_optimal
+p_optimal(bayes_SMEP_sims, "Bayes_SMEP model prior predictive: proportion optimal choice over time on task")
+```
+delta_SM:
+
+```{r prior_delta_SM}
+set.seed(1)
+delta_SM_pars <- sub_params_delta(eta_mu = rnorm(1,0,5), eta_mu_diff = rnorm(1,0,5), eta_sigma = abs(rnorm(1,0,5)),
+                                  beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,0), phi_mu_diff = rnorm(1,0,0), phi_sigma = abs(rnorm(1,0,0)),
+                                  persev_mu = rnorm(1,0,0), persev_mu_diff = rnorm(1,0,0), persev_sigma = abs(rnorm(1,0,0)),
+                                  eta_raw = rnorm(Nsub,0,1),beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,0), 
+                                  persev_raw = rnorm(Nsub,0,0))
+delta_SM_sims <- sim_all_delta(delta_SM_pars$etas, delta_SM_pars$betas, delta_SM_pars$phis, delta_SM_pars$persevs)
+# total reward
+total_reward(delta_SM_sims, "delta_SM model prior predictive: total reward over time on task")
+# p_optimal
+p_optimal(delta_SM_sims, "delta_SM model prior predictive: proportion optimal choice over time on task")
+```
+delta_SME:
+
+```{r prior_delta_SME}
+set.seed(1)
+delta_SME_pars <- sub_params_delta(eta_mu = rnorm(1,0,5), eta_mu_diff = rnorm(1,0,5), eta_sigma = abs(rnorm(1,0,5)),
+                                  beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,1), phi_mu_diff = rnorm(1,0,1), phi_sigma = abs(rnorm(1,0,1)),
+                                  persev_mu = rnorm(1,0,0), persev_mu_diff = rnorm(1,0,0), persev_sigma = abs(rnorm(1,0,0)),
+                                  eta_raw = rnorm(Nsub,0,1),beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,1), 
+                                  persev_raw = rnorm(Nsub,0,0))
+delta_SME_sims <- sim_all_delta(delta_SME_pars$etas, delta_SME_pars$betas, delta_SME_pars$phis, delta_SME_pars$persevs)
+# total reward
+total_reward(delta_SME_sims, "delta_SME model prior predictive: total reward over time on task")
+# p_optimal
+p_optimal(delta_SME_sims, "delta_SME model prior predictive: proportion optimal choice over time on task")
+```
+
+delta_SMP:
+
+```{r prior_delta_SMP}
+set.seed(1)
+delta_SMP_pars <- sub_params_delta(eta_mu = rnorm(1,0,3), eta_mu_diff = rnorm(1,0,3), eta_sigma = abs(rnorm(1,0,3)),
+                                  beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,0), phi_mu_diff = rnorm(1,0,0), phi_sigma = abs(rnorm(1,0,0)),
+                                  persev_mu = rnorm(1,0,1), persev_mu_diff = rnorm(1,0,1), persev_sigma = abs(rnorm(1,0,1)),
+                                  eta_raw = rnorm(Nsub,0,1),beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,0), 
+                                  persev_raw = rnorm(Nsub,0,1))
+delta_SMP_sims <- sim_all_delta(delta_SMP_pars$etas, delta_SMP_pars$betas, delta_SMP_pars$phis, delta_SMP_pars$persevs)
+# total reward
+total_reward(delta_SMP_sims, "delta_SMP model prior predictive: total reward over time on task")
+# p_optimal
+p_optimal(delta_SMP_sims, "delta_SMP model prior predictive: proportion optimal choice over time on task")
+```
+
+delta_SMEP:
+
+```{r prior_delta_SMEP}
+set.seed(123)
+delta_SMEP_pars <- sub_params_delta(eta_mu = rnorm(1,0,3), eta_mu_diff = rnorm(1,0,3), eta_sigma = abs(rnorm(1,0,3)),
+                                  beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rnorm(1,0,1), beta_sigma = abs(rnorm(1,0,1)), 
+                                  phi_mu = rnorm(1,0,1), phi_mu_diff = rnorm(1,0,1), phi_sigma = abs(rnorm(1,0,1)),
+                                  persev_mu = rnorm(1,0,1), persev_mu_diff = rnorm(1,0,1), persev_sigma = abs(rnorm(1,0,1)),
+                                  eta_raw = rnorm(Nsub,0,1),beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,1), 
+                                  persev_raw = rnorm(Nsub,0,1))
+delta_SMEP_sims <- sim_all_delta(delta_SMEP_pars$etas, delta_SMEP_pars$betas, delta_SMEP_pars$phis, delta_SMEP_pars$persevs)
+# total reward
+total_reward(delta_SMEP_sims, "delta_SMEP model prior predictive: total reward over time on task")
+# p_optimal
+p_optimal(delta_SMEP_sims, "delta_SMEP model prior predictive: proportion optimal choice over time on task")
+```
