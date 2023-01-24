@@ -20,7 +20,7 @@ parameters {
   real eta_mu; // hyperparameter for the mean of eta (needed for alphas)
   real eta_mu_diff;
   real<lower=0> eta_sigma; // hyperparameter for the standard deviation of eta (needed for alphas)
-  real beta_mu; // hyperparameter for the mean of the distribution of beta parameters
+  real<lower=0> beta_mu; // hyperparameter for the mean of the distribution of beta parameters
   real beta_mu_diff;
   real<lower=0> beta_sigma; // hyperparameter for the standard deviation of the distribution of beta parameters
   
