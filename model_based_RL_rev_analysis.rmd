@@ -61,7 +61,7 @@ learn_df <- learn_df %>%
       grepl(door_key[4],chosen_door) ~ 4
     ))
 
-# create list for modeling
+# create lists for modeling
 bayes_data_list <- list(
              totalTrials = nrow(learn_df), 
              nSubjects = length(unique(learn_df$ID)), 
@@ -71,6 +71,68 @@ bayes_data_list <- list(
              rewards = learn_df$reward,
              condition = as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1]))
 )
+delta_data_list <- list(
+             totalTrials = nrow(learn_df), 
+             nSubjects = length(unique(learn_df$ID)), 
+             subject = learn_df$ID_num, 
+             trialNum = learn_df$learn_trial_n,
+             choices = learn_df$chosen_door_num, 
+             rewards = learn_df$reward,
+             condition = as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1]))==1)
+)
+# compute exploration bonus for delta learning rule: scales linearly with the time it's been since an option was last chosen
+exploration_bonus <- data.frame(matrix(nrow = nrow(learn_df), ncol = 4))
+for (t in 1:(nrow(learn_df)-1)){
+  if(learn_df$learn_trial_n[t]==1){
+    exploration_bonus[t,] <- 1
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+      if(length(which(learn_df$chosen_door_num[(1+(learn_df$ID_num[t]-1)*100):t] %in% i))==0){
+        exploration_bonus[t+1,i] <- t - (learn_df$ID_num[t]-1)*100 # hasn't been chosen before
+      }else{
+        exploration_bonus[t+1,i] <- t - (max(which(learn_df$chosen_door_num[(1+(learn_df$ID_num[t]-1)*100):t] %in% i)) + (learn_df$ID_num[t]-1)*100)
+      }
+  }
+}
+delta_data_list_eb <- list(
+             totalTrials = nrow(learn_df), 
+             nSubjects = length(unique(learn_df$ID)), 
+             subject = learn_df$ID_num, 
+             trialNum = learn_df$learn_trial_n,
+             choices = learn_df$chosen_door_num, 
+             rewards = learn_df$reward,
+             eb = exploration_bonus,
+             condition = as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1]))==1)
+)
+```
+
+model-free measures of behavioral performance
+
+```{r model_free}
+# total reward
+learn_df %>%
+  mutate(trial_bins = cut(learn_trial_n, breaks = 5))%>%
+  mutate(trial_bins = as.numeric(as.factor(trial_bins)))%>%
+  group_by(ID_num, trial_bins, reward_list) %>%
+  summarise(total_reward = sum(reward)) %>%
+  ggplot(aes(x = as.factor(trial_bins), y = total_reward))+
+  geom_boxplot()+
+  geom_jitter(alpha = 0.5)+
+  facet_wrap("reward_list")
+
+# p_optimal
+learn_df %>%
+  mutate(trial_bins = cut(learn_trial_n, breaks = 5))%>%
+  mutate(trial_bins = as.numeric(as.factor(trial_bins)))%>%
+  group_by(ID_num, trial_bins, reward_list) %>%
+  summarise(p_optimal = sum(optimal_choice)/n()) %>%
+  ggplot(aes(x = as.factor(trial_bins), y = p_optimal))+
+  geom_boxplot()+
+  geom_jitter(alpha = 0.5)+
+  facet_wrap("reward_list")
 ```
 
 Bayes_SMEP was the winning model from previous analysis
@@ -238,3 +300,33 @@ effectsize::cohens_d(n~condition, data = choice_summary %>%
   filter(choice_type == "random_exploration") %>%
   ungroup())
 ```
+individual level params
+
+```{r params_extract}
+# get the point estimate (mean) for individual subject level parameters
+betas <- apply(bayes_SMEP_draws$beta, 2, mean)
+phis <- apply(bayes_SMEP_draws$phi, 2, mean)
+persevs <- apply(bayes_SMEP_draws$persev, 2, mean)
+# learning rate on each trial
+Kgains <- apply(bayes_SMEP_draws$Kgain, 2, mean)
+
+# combine with learn data
+for(row in 1:nrow(learn_df)){
+  learn_df$inverse_temperature[row] <- betas[learn_df$ID_num[row]]
+  learn_df$directed_exploration[row] <- phis[learn_df$ID_num[row]]
+  learn_df$perseveration[row] <- persevs[learn_df$ID_num[row]]
+  learn_df$learning_rate[row] <- Kgains[row]
+}
+
+# prediction error on each trial is received - expected reward for the chosen door 
+for(row in 1:nrow(learn_df)){
+  learn_df$prediction_error[row] <- learn_df$reward[row] - bayes_SMEP_Q[row, learn_df$chosen_door_num[row]]
+}
+
+# append choice type
+learn_df$choice_type <- learn_data_choice_classification$choice_type
+
+# export 
+write.csv(learn_df, file = "/Users/candiceyuxiwang/Documents/CNAP/Projects/contextRL/combined_sample_learn_data_params.csv")
+```
+
