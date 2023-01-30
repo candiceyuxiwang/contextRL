@@ -88,12 +88,23 @@ for (t in 1:(nrow(learn_df)-1)){
     exploration_bonus[t,] <- 1
   }
   for (i in 1:4){
-     # for each arm, see check the last time that it was chosen
+    # check if this is the sub with 8 missing trials
+    if(learn_df$ID_num[t] <= 39){
+      # for each arm, see check the last time that it was chosen
       if(length(which(learn_df$chosen_door_num[(1+(learn_df$ID_num[t]-1)*100):t] %in% i))==0){
         exploration_bonus[t+1,i] <- t - (learn_df$ID_num[t]-1)*100 # hasn't been chosen before
       }else{
         exploration_bonus[t+1,i] <- t - (max(which(learn_df$chosen_door_num[(1+(learn_df$ID_num[t]-1)*100):t] %in% i)) + (learn_df$ID_num[t]-1)*100)
       }
+    }else{
+      # for each arm, see check the last time that it was chosen
+      if(length(which(learn_df$chosen_door_num[(1+(learn_df$ID_num[t]-1)*100 - 8):t] %in% i))==0){
+        exploration_bonus[t+1,i] <- t - (learn_df$ID_num[t]-1)*100 + 8 # hasn't been chosen before
+      }else{
+        exploration_bonus[t+1,i] <- t - (max(which(learn_df$chosen_door_num[(1+(learn_df$ID_num[t]-2)*100+92):t] %in% i)) + (learn_df$ID_num[t]-2)*100+92)
+      }
+    }
+     
   }
 }
 delta_data_list_eb <- list(
