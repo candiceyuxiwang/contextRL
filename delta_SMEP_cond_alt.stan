@@ -27,7 +27,7 @@ parameters {
   real<lower=0> beta_mu; // hyperparameter for the mean of the distribution of beta parameters
   real beta_mu_diff; // difference between beta_mu[1] (imperative) and beta_mu[2] (interrogative)
   real<lower=0> beta_sigma; // hyperparameter for the standard deviation of the distribution of beta parameters
-  real<lower=0> phi_mu; // hyperparameter for the mean of phi (directed exploration bonus)
+  real phi_mu; // hyperparameter for the mean of phi (directed exploration bonus)
   real phi_mu_diff;
   real<lower=0> phi_sigma; // hyperparameter for the standard deviation of distribution of phi parameters
   real persev_mu; // hyperparameter for perserveration
