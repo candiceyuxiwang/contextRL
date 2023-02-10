@@ -118,21 +118,36 @@ delta_data_list_eb <- list(
              condition = as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1])),
              nSubCond1 = sum(as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1]))==1)
 )
+### just ssample 1 (for re-doing deltaSMEP fitting)
+delta_data_list_eb_sample1 <- list(
+  totalTrials = nrow(learn_df_s1), 
+             nSubjects = length(unique(learn_df_s1$ID)), 
+             subject = learn_df_s1$ID_num, 
+             trialNum = learn_df_s1$learn_trial_n,
+             choices = learn_df_s1$chosen_door_num, 
+             rewards = learn_df_s1$reward,
+             eb = exploration_bonus[1:9992,],
+             condition = as.numeric(as.factor(learn_df_s1$condition[learn_df_s1$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_df_s1$condition[learn_df_s1$learn_trial_n==1]))==1)
+)
 ```
 
 model-free measures of behavioral performance
 
 ```{r model_free}
 # total reward
-learn_df %>%
+obs_dat <- learn_df %>%
   mutate(trial_bins = cut(learn_trial_n, breaks = 5))%>%
   mutate(trial_bins = as.numeric(as.factor(trial_bins)))%>%
-  group_by(ID_num, trial_bins, reward_list) %>%
+  group_by(ID_num, trial_bins) %>%
   summarise(total_reward = sum(reward)) %>%
   ggplot(aes(x = as.factor(trial_bins), y = total_reward))+
   geom_boxplot()+
   geom_jitter(alpha = 0.5)+
-  facet_wrap("reward_list")
+  xlab("trial bins")+
+  #facet_wrap("reward_list")+
+  ggtitle("Observed data")+
+  theme_allie()
 
 # p_optimal
 learn_df %>%
@@ -146,30 +161,97 @@ learn_df %>%
   facet_wrap("reward_list")
 ```
 
-Bayes_SMEP was the winning model from previous analysis
 
-model-fitting on the Cerberus (rev_analysis/combined_sample_learn_fit_bayes_SMEP.r)
+model comparison
+
+```{r}
+library(loo)
+loo_delta_SM <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SM_loo.rds")
+loo_delta_SMP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SMP_loo.rds")
+loo_delta_SME <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SME_loo.rds")
+loo_delta_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SMEP_loo.rds")
+loo_bayes_SM <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_bayes_SM_loo.rds")
+loo_bayes_SMP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_bayes_SMP_loo.rds")
+loo_bayes_SME <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_bayes_SME_loo.rds")
+loo_bayes_SMEP <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_bayes_SMEP_loo.rds")
+
+# use the loo_compare function to compare multiple models on expected log predictive density (ELPD) for new data:
+loo_compare(loo_delta_SM, loo_delta_SMP, loo_delta_SME, loo_delta_SMEP, loo_bayes_SM, loo_bayes_SMP, loo_bayes_SME, loo_bayes_SMEP)
+
+log_likelihoods <- data.frame(matrix(nrow = 8, ncol = 2))
+colnames(log_likelihoods) <- c("model_name","elpd")
+log_likelihoods$model_name[1] <- "delta\nSM"
+log_likelihoods$elpd[1] <- loo_delta_SM$estimates[1]
+log_likelihoods$model_name[2] <- "delta\nSME"
+log_likelihoods$elpd[2] <- loo_delta_SME$estimates[1]
+log_likelihoods$model_name[3] <- "delta\nSMP"
+log_likelihoods$elpd[3] <- loo_delta_SMP$estimates[1]
+log_likelihoods$model_name[4] <- "delta\nSMEP"
+log_likelihoods$elpd[4] <- loo_delta_SMEP$estimates[1]
+log_likelihoods$model_name[5] <- "bayes\nSM"
+log_likelihoods$elpd[5] <- loo_bayes_SM$estimates[1]
+log_likelihoods$model_name[6] <- "bayes\nSME"
+log_likelihoods$elpd[6] <- loo_bayes_SME$estimates[1]
+log_likelihoods$model_name[7] <- "bayes\nSMP"
+log_likelihoods$elpd[7] <- loo_bayes_SMP$estimates[1]
+log_likelihoods$model_name[8] <- "bayes\nSMEP"
+log_likelihoods$elpd[8] <- loo_bayes_SMEP$estimates[1]
+# divide by the total number of data points in the sample (n*t)
+log_likelihoods <- log_likelihoods %>%
+  mutate(elpd_div_trial = elpd/nrow(learn_df))
+
+# plot
+levels_order <- c("delta\nSM","bayes\nSM","delta\nSMP","bayes\nSMP","delta\nSME","bayes\nSME","delta\nSMEP","bayes\nSMEP")
+
+log_likelihoods %>%
+  ggplot(aes(x = factor(model_name, level = levels_order), y = elpd_div_trial))+
+  geom_bar(stat="identity")+
+  coord_cartesian(ylim = c(-1.1, -0.8))+
+  ylab("loo log-likelihood")+
+  xlab("")+
+  theme_allie()
+
+```
+delta_SMEP is the winning model
+
+model-fitting on the Cerberus (rev_analysis/combined_sample_learn_fit_delta_SMEP.r)
 
 ```{r group_diff_params}
 # posterior draws extracted from fitted object
-bayes_SMEP_draws <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_bayes_SMEP_draws.rds")
+delta_SMEP_draws <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SMEP_draws.rds")
 
 library(ggdist)
 # make dataframes for hyperparamters
-beta_mu_diff <- as.data.frame(bayes_SMEP_draws$beta_mu_diff)
+alpha_mu_diff <- as.data.frame(delta_SMEP_draws$alpha_mu_diff)
+colnames(alpha_mu_diff) <- "alpha_mu_diff_draws"
+beta_mu_diff <- as.data.frame(delta_SMEP_draws$beta_mu_diff)
 colnames(beta_mu_diff) <- "beta_mu_diff_draws"
-phi_mu_diff <- as.data.frame(bayes_SMEP_draws$phi_mu_diff)
+phi_mu_diff <- as.data.frame(delta_SMEP_draws$phi_mu_diff)
 colnames(phi_mu_diff) <- "phi_mu_diff_draws"
-persev_mu_diff <- as.data.frame(bayes_SMEP_draws$persev_mu_diff)
+persev_mu_diff <- as.data.frame(delta_SMEP_draws$persev_mu_diff)
 colnames(persev_mu_diff) <- "persev_mu_diff_draws"
 
 library(tidybayes)
+tidybayes::hdci(alpha_mu_diff$alpha_mu_diff_draws, .width = 0.95)
 tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.95)
 tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.95)
 tidybayes::hdci(persev_mu_diff$persev_mu_diff_draws, .width = 0.95)
 
 library(ggplot2)
 # make plots
+alpha_mu_diff %>%
+  ggplot(aes(x = alpha_mu_diff_draws)) +
+  # point estimate = mean; quantile interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+ 
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  # xlim(c(-0.06,0.06))+
+  xlab("learning rate")+
+  ylab("")+
+  theme_allie()
+
 beta_mu_diff %>%
   ggplot(aes(x = beta_mu_diff_draws)) +
   # point estimate = mean; quantile interval at 95%
@@ -211,25 +293,24 @@ we can classify choices based on model-estimated expected values and estimated u
 
 ```{r}
 # model-estimated Q value 
-bayes_SMEP_Q <- as.data.frame(apply(bayes_SMEP_draws$v, c(2,3), mean))
-bayes_SMEP_Q <- bayes_SMEP_Q %>%
-  cbind(max_Q_choice = max.col(bayes_SMEP_Q, 'first'))
+delta_SMEP_Q <- as.data.frame(apply(delta_SMEP_draws$Q, c(2,3), mean))
+delta_SMEP_Q <- delta_SMEP_Q %>%
+  cbind(max_Q_choice = max.col(delta_SMEP_Q, 'first'))
 
-# model-estimated directed exploration bonus 
-bayes_SMEP_eb <- as.data.frame(apply(bayes_SMEP_draws$eb, c(2,3), mean))
-colnames(bayes_SMEP_eb) <- c("eb_1","eb_2","eb_3","eb_4")
-bayes_SMEP_eb <- bayes_SMEP_eb %>%
-  cbind(max_eb_choice = max.col(bayes_SMEP_eb, 'first'))
+# directed exploration bonus 
+colnames(exploration_bonus) <- c("eb_1","eb_2","eb_3","eb_4")
+exploration_bonus <- exploration_bonus %>%
+  cbind(max_eb_choice = max.col(exploration_bonus, 'first'))
 
-bayes_SMEP_eb$learn_trial_n <- learn_df$learn_trial_n
-bayes_SMEP_eb$subject <- learn_df$ID_num
-bayes_SMEP_eb$condition <- as.factor(learn_df$condition)
-bayes_SMEP_eb$reward_list <- as.factor(learn_df$reward_list)
+exploration_bonus$learn_trial_n <- learn_df$learn_trial_n
+exploration_bonus$subject <- learn_df$ID_num
+exploration_bonus$condition <- as.factor(learn_df$condition)
+exploration_bonus$reward_list <- as.factor(learn_df$reward_list)
   
 # classify choice on each trial 
-choice_classification <- bayes_SMEP_eb %>%
+choice_classification <- exploration_bonus %>%
   cbind(choice = learn_df$chosen_door_num) %>%
-  cbind(bayes_SMEP_Q) %>%
+  cbind(delta_SMEP_Q) %>%
   mutate(choice_type = case_when(
     choice == max_Q_choice ~ "exploitation",
     choice == max_eb_choice ~ "directed_exploration",

@@ -7,6 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
 ```
 
 reward schedules:
@@ -156,8 +158,10 @@ sim_subject_delta <- function(alpha, beta, phi, persev){
         # for each arm, see check the last time that it was chosen
         if(length(which(choice %in% i))==0){
           eb[t,i] <- t # hasn't been chosen before
+        }else if(choice[t-1]==i){
+          eb[t,i] <- 0
         }else{
-          eb[t,i] <- t - max(which(choice %in% i)) # the number of trials since it was last chosen
+          eb[t,i] <- t - max(which(choice %in% i))-1 # the number of trials since it was last chosen
         }
       }
     }
@@ -212,9 +216,9 @@ sub_params_bayes <- function(beta_mu, beta_mu_diff, beta_sigma, phi_mu, phi_mu_d
 }
 sub_params_bayes_2 <- function(beta_mu, beta_mu_diff, beta_sigma, phi_mu, phi_mu_diff, phi_sigma, persev_mu, persev_mu_diff, persev_sigma){
   conditions <- c(rep(1, Nsub/2), rep(2, Nsub/2))
-  betas <- c(rnorm(Nsub/2, beta_mu + beta_mu_diff, beta_sigma), rnorm(Nsub/2, beta_mu - beta_mu_diff, beta_sigma))
-  phis <- c(rnorm(Nsub/2, phi_mu + phi_mu_diff, phi_sigma), rnorm(Nsub/2, phi_mu - phi_mu_diff, phi_sigma))
-  persevs <- c(rnorm(Nsub/2, persev_mu + persev_mu_diff, persev_sigma), rnorm(Nsub/2, persev_mu - persev_mu_diff, persev_sigma))
+  betas <- c(rnorm(Nsub/2, beta_mu + beta_mu_diff/2, beta_sigma), rnorm(Nsub/2, beta_mu - beta_mu_diff/2, beta_sigma))
+  phis <- c(rnorm(Nsub/2, phi_mu + phi_mu_diff/2, phi_sigma), rnorm(Nsub/2, phi_mu - phi_mu_diff/2, phi_sigma))
+  persevs <- c(rnorm(Nsub/2, persev_mu + persev_mu_diff/2, persev_sigma), rnorm(Nsub/2, persev_mu - persev_mu_diff/2, persev_sigma))
   return(as.data.frame(cbind(betas, phis, persevs, conditions)))
 }
 
@@ -237,6 +241,14 @@ sub_params_delta <- function(eta_mu, eta_mu_diff, eta_sigma, beta_mu, beta_mu_di
     }
   }
   return(as.data.frame(cbind(etas, betas, phis, persevs)))
+}
+sub_params_delta_2 <- function(eta_mu, eta_mu_diff, eta_sigma, beta_mu, beta_mu_diff, beta_sigma, phi_mu, phi_mu_diff, phi_sigma, persev_mu, persev_mu_diff, persev_sigma){
+  conditions <- c(rep(1, Nsub/2), rep(2, Nsub/2))
+  etas <- c(rnorm(Nsub/2, eta_mu + eta_mu_diff/2, eta_sigma), rnorm(Nsub/2, eta_mu - eta_mu_diff/2, eta_sigma))
+  betas <- abs(c(rnorm(Nsub/2, beta_mu + beta_mu_diff/2, beta_sigma), rnorm(Nsub/2, beta_mu - beta_mu_diff/2, beta_sigma)))
+  phis <- c(rnorm(Nsub/2, phi_mu + phi_mu_diff/2, phi_sigma), rnorm(Nsub/2, phi_mu - phi_mu_diff/2, phi_sigma))
+  persevs <- c(rnorm(Nsub/2, persev_mu + persev_mu_diff/2, persev_sigma), rnorm(Nsub/2, persev_mu - persev_mu_diff/2, persev_sigma))
+  return(as.data.frame(cbind(etas, betas, phis, persevs, conditions)))
 }
 ```
 
@@ -296,8 +308,9 @@ total_reward <- function(df, plot_name){
     geom_boxplot()+
     geom_jitter(alpha = 0.5)+
     xlab("trial bins")+
-    facet_wrap("reward_list")+
-    ggtitle(as.character(plot_name))
+    #facet_wrap("reward_list")+
+    ggtitle(as.character(plot_name))+
+    theme_allie()
   return(plot)
 }
 
@@ -327,11 +340,61 @@ bayes_SM_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rn
                                   beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,0), persev_raw = rnorm(Nsub,0,0))
 bayes_SM_sims <- sim_all_bayes(bayes_SM_pars$betas, bayes_SM_pars$phis, bayes_SM_pars$persevs, sim_cond)
 # total reward
-total_reward(bayes_SM_sims, "Bayes_SM model prior predictive: total reward over time on task")
+bayesSM_sim_behavior <- total_reward(bayes_SM_sims, "Bayes_SM model")
 
 # p_optimal
 p_optimal(bayes_SM_sims, "Bayes_SM model prior predictive: proportion optimal choice over time on task")
 ```
+
+```{r posterior_bayes_SM}
+set.seed(1)
+bayes_SM_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.08,0.005), beta_mu_diff=rnorm(1,0.03,0.01), beta_sigma= rnorm(1,0.06,0.005), 
+                                   phi_mu = 0, phi_mu_diff = 0, phi_sigma = 0,
+                                   persev_mu = 0, persev_mu_diff = 0, persev_sigma = 0)
+bayes_SM_post_sims <- sim_all_bayes(bayes_SM_post_pars$betas, bayes_SM_post_pars$phis, bayes_SM_post_pars$persevs, bayes_SM_post_pars$conditions)
+
+## make data lists for model fitting
+# for all the bayesian learning rule models
+bayesSM_bayes_post_sim_list <- list(
+             totalTrials = nrow(bayes_SM_post_sims), 
+             nSubjects = length(unique(bayes_SM_post_sims$ID_num)), 
+             subject = bayes_SM_post_sims$ID_num, 
+             trialNum = bayes_SM_post_sims$learn_trial_n,
+             choices = bayes_SM_post_sims$chosen_door_num, 
+             rewards = bayes_SM_post_sims$reward,
+             condition = bayes_SM_post_sims$condition[bayes_SM_post_sims$learn_trial_n==1]
+)
+# delta learning rules
+bayesSM_post_sim_eb <- data.frame(matrix(nrow = nrow(bayes_SM_post_sims), ncol = 4))
+for (t in 1:(nrow(bayes_SM_post_sims)-1)){
+  if(bayes_SM_post_sims$learn_trial_n[t]==1){
+    bayesSM_post_sim_eb[t,] <- 1
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+      if(length(which(bayes_SM_post_sims$chosen_door_num[(1+(bayes_SM_post_sims$ID_num[t]-1)*100):t] %in% i))==0){
+        bayesSM_post_sim_eb[t+1,i] <- t - (bayes_SM_post_sims$ID_num[t]-1)*100 # hasn't been chosen before
+      }else{
+        bayesSM_post_sim_eb[t+1,i] <- t - (max(which(bayes_SM_post_sims$chosen_door_num[(1+(bayes_SM_post_sims$ID_num[t]-1)*100):t] %in% i)) + (bayes_SM_post_sims$ID_num[t]-1)*100)
+      }
+  }
+}
+bayesSM_delta_post_sim_list <- list(
+             totalTrials = nrow(bayes_SM_post_sims), 
+             nSubjects = length(unique(bayes_SM_post_sims$ID_num)), 
+             subject = bayes_SM_post_sims$ID_num, 
+             trialNum = bayes_SM_post_sims$learn_trial_n,
+             choices = bayes_SM_post_sims$chosen_door_num, 
+             rewards = bayes_SM_post_sims$reward,
+             eb = bayesSM_post_sim_eb,
+             condition = bayes_SM_post_sims$condition[bayes_SM_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(bayes_SM_post_sims$condition[bayes_SM_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(bayesSM_bayes_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/bayesSM_bayes_post_sim_list.RData")
+saveRDS(bayesSM_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/bayesSM_delta_post_sim_list.RData")
+```
+
+
 Bayes_SME:
 
 ```{r prior_bayes_SME}
@@ -342,12 +405,58 @@ bayes_SME_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = r
                                   beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,1), persev_raw = rnorm(Nsub,0,0))
 bayes_SME_sims <- sim_all_bayes(bayes_SME_pars$betas, bayes_SME_pars$phis, bayes_SME_pars$persevs, sim_cond)
 # total reward
-total_reward(bayes_SME_sims, "Bayes_SME model prior predictive: total reward over time on task")
+bayesSME_sim_behavior <- total_reward(bayes_SME_sims, "Bayes_SME model")
 
 # p_optimal
 p_optimal(bayes_SME_sims, "Bayes_SME model prior predictive: proportion optimal choice over time on task")
 ```
+```{r posterior_bayes_SME}
+set.seed(1)
+bayes_SME_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.06,0.005), beta_mu_diff=rnorm(1,0.03,0.01), beta_sigma= rnorm(1,0.04,0.005), 
+                                   phi_mu = rnorm(1,0.02,0.04), phi_mu_diff = rnorm(1,-0.22,0.09), phi_sigma = rnorm(1,0.57,0.04),
+                                   persev_mu = 0, persev_mu_diff = 0, persev_sigma = 0)
+bayes_SME_post_sims <- sim_all_bayes(bayes_SME_post_pars$betas, bayes_SME_post_pars$phis, bayes_SME_post_pars$persevs, bayes_SME_post_pars$conditions)
 
+## make data lists for model fitting
+# for all the bayesian learning rule models
+bayesSME_bayes_post_sim_list <- list(
+             totalTrials = nrow(bayes_SME_post_sims), 
+             nSubjects = length(unique(bayes_SME_post_sims$ID_num)), 
+             subject = bayes_SME_post_sims$ID_num, 
+             trialNum = bayes_SME_post_sims$learn_trial_n,
+             choices = bayes_SME_post_sims$chosen_door_num, 
+             rewards = bayes_SME_post_sims$reward,
+             condition = bayes_SME_post_sims$condition[bayes_SME_post_sims$learn_trial_n==1]
+)
+# delta learning rules
+bayesSME_post_sim_eb <- data.frame(matrix(nrow = nrow(bayes_SME_post_sims), ncol = 4))
+for (t in 1:(nrow(bayes_SME_post_sims)-1)){
+  if(bayes_SME_post_sims$learn_trial_n[t]==1){
+    bayesSME_post_sim_eb[t,] <- 1
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+      if(length(which(bayes_SME_post_sims$chosen_door_num[(1+(bayes_SME_post_sims$ID_num[t]-1)*100):t] %in% i))==0){
+        bayesSME_post_sim_eb[t+1,i] <- t - (bayes_SME_post_sims$ID_num[t]-1)*100 # hasn't been chosen before
+      }else{
+        bayesSME_post_sim_eb[t+1,i] <- t - (max(which(bayes_SME_post_sims$chosen_door_num[(1+(bayes_SME_post_sims$ID_num[t]-1)*100):t] %in% i)) + (bayes_SME_post_sims$ID_num[t]-1)*100)
+      }
+  }
+}
+bayesSME_delta_post_sim_list <- list(
+             totalTrials = nrow(bayes_SME_post_sims), 
+             nSubjects = length(unique(bayes_SME_post_sims$ID_num)), 
+             subject = bayes_SME_post_sims$ID_num, 
+             trialNum = bayes_SME_post_sims$learn_trial_n,
+             choices = bayes_SME_post_sims$chosen_door_num, 
+             rewards = bayes_SME_post_sims$reward,
+             eb = bayesSME_post_sim_eb,
+             condition = bayes_SME_post_sims$condition[bayes_SME_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(bayes_SME_post_sims$condition[bayes_SME_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(bayesSME_bayes_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/bayesSME_bayes_post_sim_list.RData")
+saveRDS(bayesSME_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/bayesSME_delta_post_sim_list.RData")
+```
 
 Bayes_SMP:
 
@@ -359,12 +468,58 @@ bayes_SMP_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = r
                                   beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,0), persev_raw = rnorm(Nsub,0,1))
 bayes_SMP_sims <- sim_all_bayes(bayes_SMP_pars$betas, bayes_SMP_pars$phis, bayes_SMP_pars$persevs, sim_cond)
 # total reward
-total_reward(bayes_SMP_sims, "Bayes_SMP model prior predictive: total reward over time on task")
+bayesSMP_sim_behavior <- total_reward(bayes_SMP_sims, "Bayes_SMP model")
 
 # p_optimal
 p_optimal(bayes_SMP_sims, "Bayes_SMP model prior predictive: proportion optimal choice over time on task")
 ```
+```{r posterior_bayes_SMP}
+set.seed(1)
+bayes_SMP_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.06,0.005), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.04,0.005), 
+                                   phi_mu = 0, phi_mu_diff = 0, phi_sigma = 0,
+                                   persev_mu = rnorm(1,0.43,0.09), persev_mu_diff = rnorm(1,0.20,0.18), persev_sigma = rnorm(1,1.24,0.07))
+bayes_SMP_post_sims <- sim_all_bayes(bayes_SMP_post_pars$betas, bayes_SMP_post_pars$phis, bayes_SMP_post_pars$persevs, bayes_SMP_post_pars$conditions)
 
+## make data lists for model fitting
+# for all the bayesian learning rule models
+bayesSMP_bayes_post_sim_list <- list(
+             totalTrials = nrow(bayes_SMP_post_sims), 
+             nSubjects = length(unique(bayes_SMP_post_sims$ID_num)), 
+             subject = bayes_SMP_post_sims$ID_num, 
+             trialNum = bayes_SMP_post_sims$learn_trial_n,
+             choices = bayes_SMP_post_sims$chosen_door_num, 
+             rewards = bayes_SMP_post_sims$reward,
+             condition = bayes_SMP_post_sims$condition[bayes_SMP_post_sims$learn_trial_n==1]
+)
+# delta learning rules
+bayesSMP_post_sim_eb <- data.frame(matrix(nrow = nrow(bayes_SMP_post_sims), ncol = 4))
+for (t in 1:(nrow(bayes_SMP_post_sims)-1)){
+  if(bayes_SMP_post_sims$learn_trial_n[t]==1){
+    bayesSMP_post_sim_eb[t,] <- 1
+  }
+  for (i in 1:4){
+     # for each arm, see check the last time that it was chosen
+      if(length(which(bayes_SMP_post_sims$chosen_door_num[(1+(bayes_SMP_post_sims$ID_num[t]-1)*100):t] %in% i))==0){
+        bayesSMP_post_sim_eb[t+1,i] <- t - (bayes_SMP_post_sims$ID_num[t]-1)*100 # hasn't been chosen before
+      }else{
+        bayesSMP_post_sim_eb[t+1,i] <- t - (max(which(bayes_SMP_post_sims$chosen_door_num[(1+(bayes_SMP_post_sims$ID_num[t]-1)*100):t] %in% i)) + (bayes_SMP_post_sims$ID_num[t]-1)*100)
+      }
+  }
+}
+bayesSMP_delta_post_sim_list <- list(
+             totalTrials = nrow(bayes_SMP_post_sims), 
+             nSubjects = length(unique(bayes_SMP_post_sims$ID_num)), 
+             subject = bayes_SMP_post_sims$ID_num, 
+             trialNum = bayes_SMP_post_sims$learn_trial_n,
+             choices = bayes_SMP_post_sims$chosen_door_num, 
+             rewards = bayes_SMP_post_sims$reward,
+             eb = bayesSMP_post_sim_eb,
+             condition = bayes_SMP_post_sims$condition[bayes_SMP_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(bayes_SMP_post_sims$condition[bayes_SMP_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(bayesSMP_bayes_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/bayesSMP_bayes_post_sim_list.RData")
+saveRDS(bayesSMP_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/bayesSMP_delta_post_sim_list.RData")
+```
 
 Bayes_SMEP:
 
@@ -376,7 +531,7 @@ bayes_SMEP_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = 
                                   beta_raw = rnorm(Nsub,0,1), phi_raw = rnorm(Nsub,0,1), persev_raw = rnorm(Nsub,0,1))
 bayes_SMEP_sims <- sim_all_bayes(bayes_SMEP_pars$betas, bayes_SMEP_pars$phis, bayes_SMEP_pars$persevs, sim_cond)
 # total reward
-total_reward(bayes_SMEP_sims, "Bayes_SMEP model prior predictive: total reward over time on task")
+bayesSMEP_sim_behavior <- total_reward(bayes_SMEP_sims, "Bayes_SMEP model")
 
 # p_optimal
 p_optimal(bayes_SMEP_sims, "Bayes_SMEP model prior predictive: proportion optimal choice over time on task")
@@ -388,14 +543,28 @@ set.seed(1)
 #                                   persev_mu = 0.44, persev_mu_diff = -0.13, persev_sigma = 0.95)
 bayes_SMEP_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.06,0.005), beta_mu_diff=rnorm(1,0.03,0.01), beta_sigma= rnorm(1,0.04,0.005), 
                                    phi_mu = rnorm(1,0.12,0.04), phi_mu_diff = rnorm(1,-0.24,0.08), phi_sigma = rnorm(1,0.60,0.04),
-                                   persev_mu = rnorm(1,0.44,0.07), persev_mu_diff = rnorm(1,-0.13,0.15), persev_sigma = rnorm(2,0.95,0.06))
+                                   persev_mu = rnorm(1,0.44,0.07), persev_mu_diff = rnorm(1,-0.13,0.15), persev_sigma = rnorm(1,0.95,0.06))
 bayes_SMEP_post_sims <- sim_all_bayes(bayes_SMEP_post_pars$betas, bayes_SMEP_post_pars$phis, bayes_SMEP_post_pars$persevs, bayes_SMEP_post_pars$conditions)
 
 # total reward
 total_reward(bayes_SMEP_post_sims, "Bayes_SMEP model posterior predictive: total reward over time on task")
+bayes_SMEP_post_sims %>%
+  mutate(condition = as.factor(condition))%>%
+  group_by(ID_num, condition) %>%
+  summarise(total_reward = sum(reward))%>%
+  ggplot(aes(x = condition, y = total_reward))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange")
 
 # p_optimal
 p_optimal(bayes_SMEP_post_sims, "Bayes_SMEP model posterior predictive: proportion optimal choice over time on task")
+bayes_SMEP_post_sims %>%
+  mutate(condition = as.factor(condition))%>%
+  group_by(ID_num, condition) %>%
+  summarise(p_optimal = sum(optimal_choice))%>%
+  ggplot(aes(x = condition, y = p_optimal))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange")
 
 ## make data lists for model fitting
 # for all the bayesian learning rule models
@@ -460,10 +629,43 @@ delta_SM_pars <- sub_params_delta(eta_mu = rnorm(1,0,5), eta_mu_diff = rnorm(1,0
                                   persev_raw = rnorm(Nsub,0,0))
 delta_SM_sims <- sim_all_delta(delta_SM_pars$etas, delta_SM_pars$betas, delta_SM_pars$phis, delta_SM_pars$persevs, sim_cond)
 # total reward
-total_reward(delta_SM_sims, "delta_SM model prior predictive: total reward over time on task")
+deltaSM_sim_behavior <- total_reward(delta_SM_sims, "delta_SM model")
 # p_optimal
 p_optimal(delta_SM_sims, "delta_SM model prior predictive: proportion optimal choice over time on task")
 ```
+```{r posterior_delta_SM}
+delta_SM_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.28,0.25), eta_mu_diff=rnorm(1,1.48,0.50), eta_sigma= rnorm(1,2.92,0.25),
+                                           beta_mu=rnorm(1,0.14,0.01), beta_mu_diff=rnorm(1,0.02,0.02), beta_sigma= rnorm(1,0.14,0.01), 
+                                   phi_mu = 0, phi_mu_diff = 0, phi_sigma =0,
+                                   persev_mu = 0, persev_mu_diff = 0, persev_sigma = 0)
+delta_SM_post_sims <- sim_all_delta(delta_SM_post_pars$etas, delta_SM_post_pars$betas, delta_SM_post_pars$phis, delta_SM_post_pars$persevs, delta_SM_post_pars$conditions)
+
+# make data list for model and parameter recovery
+deltaSM_bayes_post_sim_list <- list(
+             totalTrials = nrow(delta_SM_post_sims), 
+             nSubjects = length(unique(delta_SM_post_sims$ID_num)), 
+             subject = delta_SM_post_sims$ID_num, 
+             trialNum = delta_SM_post_sims$learn_trial_n,
+             choices = delta_SM_post_sims$chosen_door_num, 
+             rewards = delta_SM_post_sims$reward,
+             condition = delta_SM_post_sims$condition[delta_SM_post_sims$learn_trial_n==1]
+)
+
+deltaSM_delta_post_sim_list <- list(
+             totalTrials = nrow(delta_SM_post_sims), 
+             nSubjects = length(unique(delta_SM_post_sims$ID_num)), 
+             subject = delta_SM_post_sims$ID_num, 
+             trialNum = delta_SM_post_sims$learn_trial_n,
+             choices = delta_SM_post_sims$chosen_door_num, 
+             rewards = delta_SM_post_sims$reward,
+             eb = delta_SM_post_sims[,7:10],
+             condition = delta_SM_post_sims$condition[delta_SM_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(delta_SM_post_sims$condition[delta_SM_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(deltaSM_bayes_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/deltaSM_bayes_post_sim_list.RData")
+saveRDS(deltaSM_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/deltaSM_delta_post_sim_list.RData")
+```
+
 delta_SME:
 
 ```{r prior_delta_SME}
@@ -476,9 +678,41 @@ delta_SME_pars <- sub_params_delta(eta_mu = rnorm(1,0,5), eta_mu_diff = rnorm(1,
                                   persev_raw = rnorm(Nsub,0,0))
 delta_SME_sims <- sim_all_delta(delta_SME_pars$etas, delta_SME_pars$betas, delta_SME_pars$phis, delta_SME_pars$persevs, sim_cond)
 # total reward
-total_reward(delta_SME_sims, "delta_SME model prior predictive: total reward over time on task")
+deltaSME_sim_behavior <- total_reward(delta_SME_sims, "delta_SME model")
 # p_optimal
 p_optimal(delta_SME_sims, "delta_SME model prior predictive: proportion optimal choice over time on task")
+```
+```{r posterior_delta_SME}
+delta_SME_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.03,0.21), eta_mu_diff=rnorm(1,0.91,0.41), eta_sigma= rnorm(1,2.19,0.21),
+                                           beta_mu=rnorm(1,0.10,0.01), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.06,0.01), 
+                                   phi_mu = rnorm(1,0.06,0.02), phi_mu_diff = rnorm(1,-0.12,0.04), phi_sigma =rnorm(1,0.29,0.02),
+                                   persev_mu = 0, persev_mu_diff = 0, persev_sigma = 0)
+delta_SME_post_sims <- sim_all_delta(delta_SME_post_pars$etas, delta_SME_post_pars$betas, delta_SME_post_pars$phis, delta_SME_post_pars$persevs, delta_SME_post_pars$conditions)
+
+# make data list for model and parameter recovery
+deltaSME_bayes_post_sim_list <- list(
+             totalTrials = nrow(delta_SME_post_sims), 
+             nSubjects = length(unique(delta_SME_post_sims$ID_num)), 
+             subject = delta_SME_post_sims$ID_num, 
+             trialNum = delta_SME_post_sims$learn_trial_n,
+             choices = delta_SME_post_sims$chosen_door_num, 
+             rewards = delta_SME_post_sims$reward,
+             condition = delta_SME_post_sims$condition[delta_SME_post_sims$learn_trial_n==1]
+)
+
+deltaSME_delta_post_sim_list <- list(
+             totalTrials = nrow(delta_SME_post_sims), 
+             nSubjects = length(unique(delta_SME_post_sims$ID_num)), 
+             subject = delta_SME_post_sims$ID_num, 
+             trialNum = delta_SME_post_sims$learn_trial_n,
+             choices = delta_SME_post_sims$chosen_door_num, 
+             rewards = delta_SME_post_sims$reward,
+             eb = delta_SME_post_sims[,7:10],
+             condition = delta_SME_post_sims$condition[delta_SME_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(delta_SME_post_sims$condition[delta_SME_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(deltaSME_bayes_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/deltaSME_bayes_post_sim_list.RData")
+saveRDS(deltaSME_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/deltaSME_delta_post_sim_list.RData")
 ```
 
 delta_SMP:
@@ -493,10 +727,43 @@ delta_SMP_pars <- sub_params_delta(eta_mu = rnorm(1,0,3), eta_mu_diff = rnorm(1,
                                   persev_raw = rnorm(Nsub,0,1))
 delta_SMP_sims <- sim_all_delta(delta_SMP_pars$etas, delta_SMP_pars$betas, delta_SMP_pars$phis, delta_SMP_pars$persevs, sim_cond)
 # total reward
-total_reward(delta_SMP_sims, "delta_SMP model prior predictive: total reward over time on task")
+deltaSMP_sim_behavior <- total_reward(delta_SMP_sims, "delta_SMP model")
 # p_optimal
 p_optimal(delta_SMP_sims, "delta_SMP model prior predictive: proportion optimal choice over time on task")
 ```
+```{r posterior_delta_SMP}
+delta_SMP_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.17,0.23), eta_mu_diff=rnorm(1,1.19,0.45), eta_sigma= rnorm(1,2.51,0.23),
+                                           beta_mu=rnorm(1,0.10,0.01), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.06,0.01), 
+                                   phi_mu = 0, phi_mu_diff = 0, phi_sigma =0,
+                                   persev_mu = rnorm(1,0.32,0.09), persev_mu_diff = rnorm(1,0.17,0.17), persev_sigma = rnorm(1,1.16,0.06))
+delta_SMP_post_sims <- sim_all_delta(delta_SMP_post_pars$etas, delta_SMP_post_pars$betas, delta_SMP_post_pars$phis, delta_SMP_post_pars$persevs, delta_SMP_post_pars$conditions)
+
+# make data list for model and parameter recovery
+deltaSMP_bayes_post_sim_list <- list(
+             totalTrials = nrow(delta_SMP_post_sims), 
+             nSubjects = length(unique(delta_SMP_post_sims$ID_num)), 
+             subject = delta_SMP_post_sims$ID_num, 
+             trialNum = delta_SMP_post_sims$learn_trial_n,
+             choices = delta_SMP_post_sims$chosen_door_num, 
+             rewards = delta_SMP_post_sims$reward,
+             condition = delta_SMP_post_sims$condition[delta_SMP_post_sims$learn_trial_n==1]
+)
+
+deltaSMP_delta_post_sim_list <- list(
+             totalTrials = nrow(delta_SMP_post_sims), 
+             nSubjects = length(unique(delta_SMP_post_sims$ID_num)), 
+             subject = delta_SMP_post_sims$ID_num, 
+             trialNum = delta_SMP_post_sims$learn_trial_n,
+             choices = delta_SMP_post_sims$chosen_door_num, 
+             rewards = delta_SMP_post_sims$reward,
+             eb = delta_SMP_post_sims[,7:10],
+             condition = delta_SMP_post_sims$condition[delta_SMP_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(delta_SMP_post_sims$condition[delta_SMP_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(deltaSMP_bayes_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/deltaSMP_bayes_post_sim_list.RData")
+saveRDS(deltaSMP_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/model_recovery/deltaSMP_delta_post_sim_list.RData")
+```
+
 
 delta_SMEP:
 
@@ -510,7 +777,71 @@ delta_SMEP_pars <- sub_params_delta(eta_mu = rnorm(1,0,3), eta_mu_diff = rnorm(1
                                   persev_raw = rnorm(Nsub,0,1))
 delta_SMEP_sims <- sim_all_delta(delta_SMEP_pars$etas, delta_SMEP_pars$betas, delta_SMEP_pars$phis, delta_SMEP_pars$persevs, sim_cond)
 # total reward
-total_reward(delta_SMEP_sims, "delta_SMEP model prior predictive: total reward over time on task")
+deltaSMEP_sim_behavior <- total_reward(delta_SMEP_sims, "delta_SMEP model")
+
+# combine and compare with observed data
+library(ggpubr)
+ggarrange(obs_dat, deltaSM_sim_behavior, bayesSM_sim_behavior, deltaSMP_sim_behavior, bayesSMP_sim_behavior, 
+          deltaSME_sim_behavior, bayesSME_sim_behavior, deltaSMEP_sim_behavior, bayesSMEP_sim_behavior,
+          labels = c("A", "B", "C","D","E","F","G","H","I"),
+          ncol = 3, nrow = 3)
+
 # p_optimal
 p_optimal(delta_SMEP_sims, "delta_SMEP model prior predictive: proportion optimal choice over time on task")
+```
+```{r posterior_delta_SMEP}
+set.seed(123)
+# hyperparameter posterior means
+# delta_SMEP_post_pars <- sub_params_delta_2(eta_mu = -1.03, eta_mu_diff = 0.91, eta_sigma = 2.19,
+#                                            beta_mu = 0.10, beta_mu_diff = 0.02, beta_sigma = 0.06,
+#                                    phi_mu = 0.10, phi_mu_diff = -0.13, phi_sigma = 0.30,
+#                                    persev_mu = 0.51, persev_mu_diff = -0.10, persev_sigma = 0.94)
+# delta_SMEP_post_pars$ID_num <- row.names(delta_SMEP_post_pars)
+# saveRDS(delta_SMEP_post_pars, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/parameter_recovery/deltaSMEP_sub_pars.RData")
+# hyperparameter posterior distributions
+delta_SMEP_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.03,0.21), eta_mu_diff=rnorm(1,0.91,0.41), eta_sigma= rnorm(1,2.19,0.21),
+                                           beta_mu=rnorm(1,0.10,0.01), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.06,0.005), 
+                                   phi_mu = rnorm(1,0.10,0.02), phi_mu_diff = rnorm(1,-0.13,0.04), phi_sigma = rnorm(1,0.30,0.02),
+                                   persev_mu = rnorm(1,0.51,0.07), persev_mu_diff = rnorm(1,-0.10,0.14), persev_sigma = rnorm(1,0.94,0.06))
+delta_SMEP_post_sims <- sim_all_delta(delta_SMEP_post_pars$etas, delta_SMEP_post_pars$betas, delta_SMEP_post_pars$phis, delta_SMEP_post_pars$persevs, delta_SMEP_post_pars$conditions)
+# saveRDS(delta_SMEP_post_sims, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/parameter_recovery/deltaSMEP_sim_data.RData")
+# total reward
+deltaSMEP_post_behavior <- total_reward(delta_SMEP_post_sims, "delta_SMEP model posterior predictive")
+deltaSMEP_post_points_cond <-delta_SMEP_post_sims %>%
+  mutate(condition = as.factor(condition))%>%
+  group_by(ID_num, condition) %>%
+  summarise(total_reward = sum(reward))%>%
+  ggplot(aes(x = condition, y = total_reward))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange")+
+  theme_allie()+
+  scale_color_red_blue("Condition")+
+  scale_x_discrete(labels=c("1" = "imperative", "2" = "interrogative"))+
+  theme(legend.position="none")+
+  ggtitle("Total reward by condition")
+ggarrange(deltaSMEP_post_behavior, deltaSMEP_post_points_cond, labels = c("A","B"), ncol = 2)
+
+# make data list for model and parameter recovery
+deltaSMEP_bayes_post_sim_list <- list(
+             totalTrials = nrow(delta_SMEP_post_sims), 
+             nSubjects = length(unique(delta_SMEP_post_sims$ID_num)), 
+             subject = delta_SMEP_post_sims$ID_num, 
+             trialNum = delta_SMEP_post_sims$learn_trial_n,
+             choices = delta_SMEP_post_sims$chosen_door_num, 
+             rewards = delta_SMEP_post_sims$reward,
+             condition = delta_SMEP_post_sims$condition[delta_SMEP_post_sims$learn_trial_n==1]
+)
+
+deltaSMEP_delta_post_sim_list <- list(
+             totalTrials = nrow(delta_SMEP_post_sims), 
+             nSubjects = length(unique(delta_SMEP_post_sims$ID_num)), 
+             subject = delta_SMEP_post_sims$ID_num, 
+             trialNum = delta_SMEP_post_sims$learn_trial_n,
+             choices = delta_SMEP_post_sims$chosen_door_num, 
+             rewards = delta_SMEP_post_sims$reward,
+             eb = delta_SMEP_post_sims[,7:10],
+             condition = delta_SMEP_post_sims$condition[delta_SMEP_post_sims$learn_trial_n==1],
+             nSubCond1 = sum(delta_SMEP_post_sims$condition[delta_SMEP_post_sims$learn_trial_n==1]==1)
+)
+saveRDS(deltaSMEP_delta_post_sim_list, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/parameter_recovery/deltaSMEP_sim_delta_list.RData")
 ```
