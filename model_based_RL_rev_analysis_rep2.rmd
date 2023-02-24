@@ -1,0 +1,78 @@
+---
+title: "model_based_RL_rev_analysis_replcation2.rmd"
+author: "Candice Wang"
+date: "2023-02-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_data}
+library(dplyr)
+library(ggplot2)
+# read in data 
+learn_data_rep2 <- read.csv("/Volumes/main2/studies/Context_RL/Data/context_RL_learn_replication2.csv")
+# exclude sub who failed attention checks 
+learn_data_rep2 <- learn_data_rep2 %>%
+  filter(ID != "5d16d17119d2ed0015e21360") 
+
+# numerical subject ID 
+learn_data_rep2 <- learn_data_rep2[order(learn_data_rep2$ID),]
+learn_data_rep2$ID_num <- as.numeric(as.factor(learn_data_rep2$ID))
+
+### door numbers
+door_key <- c("red","blue","purple","yellow")
+learn_data_rep2 <- learn_data_rep2 %>%
+    mutate(chosen_door_num = case_when(
+      grepl(door_key[1],chosen_door) ~ 1,
+      grepl(door_key[2],chosen_door) ~ 2,
+      grepl(door_key[3],chosen_door) ~ 3,
+      grepl(door_key[4],chosen_door) ~ 4
+    ))
+
+exploration_bonus_rep2 <- data.frame(matrix(nrow = nrow(learn_data_rep2), ncol = 4))
+for (t in 1:(nrow(learn_data_rep2)-1)){
+  if(learn_data_rep2$learn_trial_n[t]==1){
+    exploration_bonus_rep2[t,] <- 1
+  }
+  for (i in 1:4){
+    # for each arm, see check the last time that it was chosen
+    if(length(which(learn_data_rep2$chosen_door_num[(1+(learn_data_rep2$ID_num[t]-1)*100):t] %in% i))==0){
+      exploration_bonus_rep2[t+1,i] <- t - (learn_data_rep2$ID_num[t]-1)*100 # hasn't been chosen before
+    }else{
+      exploration_bonus_rep2[t+1,i] <- t - (max(which(learn_data_rep2$chosen_door_num[(1+(learn_data_rep2$ID_num[t]-1)*100):t] %in% i)) + (learn_data_rep2$ID_num[t]-1)*100)
+    }
+  }
+  
+}
+      
+
+# create lists for modeling
+bayes_data_list_rep2 <- list(
+             totalTrials = nrow(learn_data_rep2), 
+             nSubjects = length(unique(learn_data_rep2$ID)), 
+             subject = learn_data_rep2$ID_num, 
+             trialNum = learn_data_rep2$learn_trial_n,
+             choices = learn_data_rep2$chosen_door_num, 
+             rewards = learn_data_rep2$reward,
+             condition = as.numeric(as.factor(learn_data_rep2$condition[learn_data_rep2$learn_trial_n==1]))
+)
+delta_data_list_rep2 <- list(
+             totalTrials = nrow(learn_data_rep2), 
+             nSubjects = length(unique(learn_data_rep2$ID)), 
+             subject = learn_data_rep2$ID_num, 
+             trialNum = learn_data_rep2$learn_trial_n,
+             choices = learn_data_rep2$chosen_door_num, 
+             rewards = learn_data_rep2$reward,
+             eb = exploration_bonus_rep2,
+             condition = as.numeric(as.factor(learn_data_rep2$condition[learn_data_rep2$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_data_rep2$condition[learn_data_rep2$learn_trial_n==1]))==1)
+)
+      
+```
+
+
+
+
