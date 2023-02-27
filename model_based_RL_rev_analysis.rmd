@@ -118,18 +118,7 @@ delta_data_list_eb <- list(
              condition = as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1])),
              nSubCond1 = sum(as.numeric(as.factor(learn_df$condition[learn_df$learn_trial_n==1]))==1)
 )
-### just ssample 1 (for re-doing deltaSMEP fitting)
-delta_data_list_eb_sample1 <- list(
-  totalTrials = nrow(learn_df_s1), 
-             nSubjects = length(unique(learn_df_s1$ID)), 
-             subject = learn_df_s1$ID_num, 
-             trialNum = learn_df_s1$learn_trial_n,
-             choices = learn_df_s1$chosen_door_num, 
-             rewards = learn_df_s1$reward,
-             eb = exploration_bonus[1:9992,],
-             condition = as.numeric(as.factor(learn_df_s1$condition[learn_df_s1$learn_trial_n==1])),
-             nSubCond1 = sum(as.numeric(as.factor(learn_df_s1$condition[learn_df_s1$learn_trial_n==1]))==1)
-)
+
 ```
 
 model-free measures of behavioral performance
@@ -218,17 +207,17 @@ model-fitting on the Cerberus (rev_analysis/combined_sample_learn_fit_delta_SMEP
 
 ```{r group_diff_params}
 # posterior draws extracted from fitted object
-delta_SMEP_draws <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SMEP_draws.rds")
+delta_SMEP_draws_S1 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SMEP_draws.rds")
 
 library(ggdist)
 # make dataframes for hyperparamters
-alpha_mu_diff <- as.data.frame(delta_SMEP_draws$alpha_mu_diff)
+alpha_mu_diff <- as.data.frame(delta_SMEP_draws_S1$alpha_mu_diff)
 colnames(alpha_mu_diff) <- "alpha_mu_diff_draws"
-beta_mu_diff <- as.data.frame(delta_SMEP_draws$beta_mu_diff)
+beta_mu_diff <- as.data.frame(delta_SMEP_draws_S1$beta_mu_diff)
 colnames(beta_mu_diff) <- "beta_mu_diff_draws"
-phi_mu_diff <- as.data.frame(delta_SMEP_draws$phi_mu_diff)
+phi_mu_diff <- as.data.frame(delta_SMEP_draws_S1$phi_mu_diff)
 colnames(phi_mu_diff) <- "phi_mu_diff_draws"
-persev_mu_diff <- as.data.frame(delta_SMEP_draws$persev_mu_diff)
+persev_mu_diff <- as.data.frame(delta_SMEP_draws_S1$persev_mu_diff)
 colnames(persev_mu_diff) <- "persev_mu_diff_draws"
 
 library(tidybayes)
@@ -247,10 +236,11 @@ alpha_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
-  # xlim(c(-0.06,0.06))+
+  xlim(c(-0.3,0.3))+
   xlab("learning rate")+
   ylab("")+
-  theme_allie()
+  theme_allie()+
+  ggtitle("Higher Learning Rate in Imperative condition (Sample 1)")
 
 beta_mu_diff %>%
   ggplot(aes(x = beta_mu_diff_draws)) +
@@ -263,7 +253,8 @@ beta_mu_diff %>%
   xlim(c(-0.06,0.06))+
   xlab("inverse temperature")+
   ylab("")+
-  theme_allie()
+  theme_allie()+
+  ggtitle("No significant difference in Inverse Temperature (Sample 1)")
 
 phi_mu_diff %>%
   ggplot(aes(x = phi_mu_diff_draws)) +
@@ -272,10 +263,11 @@ phi_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
-  xlim(c(-0.6,0.6))+
+  xlim(c(-0.3,0.3))+
   xlab("directed exploration")+
   ylab("")+
-  theme_allie()
+  theme_allie()+
+  ggtitle("More Directed Exploration in Interrogative condition (Sample 1)")
 
 persev_mu_diff %>%
   ggplot(aes(x = persev_mu_diff_draws)) +
@@ -286,14 +278,15 @@ persev_mu_diff %>%
         axis.title.y = element_blank())+
   xlab("hyperparameter posterior for group difference in perserveration")+
   ylab("")+
-  theme_allie()
+  theme_allie()+
+  ggtitle("Sample 1")
 ```
 
 we can classify choices based on model-estimated expected values and estimated uncertainties
 
 ```{r}
 # model-estimated Q value 
-delta_SMEP_Q <- as.data.frame(apply(delta_SMEP_draws$Q, c(2,3), mean))
+delta_SMEP_Q <- as.data.frame(apply(delta_SMEP_draws_S1$Q, c(2,3), mean))
 delta_SMEP_Q <- delta_SMEP_Q %>%
   cbind(max_Q_choice = max.col(delta_SMEP_Q, 'first'))
 
@@ -414,7 +407,8 @@ learn_data_choice_classification %>%
   xlab("Trial #")+
   ylab("Expected Value")+
   ggtitle("Model-Derived Expected Value (example interrogative participant)")+
-  ylim(0,100)
+  ylim(0,100)+
+  coord_fixed(2)
 
 # plot trial by trial estimated uncertainty
 learn_data_choice_classification %>%

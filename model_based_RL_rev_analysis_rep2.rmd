@@ -73,6 +73,192 @@ delta_data_list_rep2 <- list(
       
 ```
 
+delta_SMEP is the winning model from sample 1
 
+model-fitting on the Cerberus (rev_analysis_rep2/rep2_sample_learn_fit_delta_SMEP.r)
+
+```{r group_diff_params}
+# posterior draws extracted from fitted object
+delta_SMEP_draws <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis_rep2/fit_obj/rep2_sample_learn_fit_delta_SMEP_draws.rds")
+
+library(ggdist)
+# make dataframes for hyperparamters
+alpha_mu_diff <- as.data.frame(delta_SMEP_draws$alpha_mu_diff)
+colnames(alpha_mu_diff) <- "alpha_mu_diff_draws"
+beta_mu_diff <- as.data.frame(delta_SMEP_draws$beta_mu_diff)
+colnames(beta_mu_diff) <- "beta_mu_diff_draws"
+phi_mu_diff <- as.data.frame(delta_SMEP_draws$phi_mu_diff)
+colnames(phi_mu_diff) <- "phi_mu_diff_draws"
+persev_mu_diff <- as.data.frame(delta_SMEP_draws$persev_mu_diff)
+colnames(persev_mu_diff) <- "persev_mu_diff_draws"
+
+# since we have a directional hypothesis, we can do a one-sided test for 
+# learning rate, inverse temperature, and directed exploration:
+# is 95% of the posterior probability on the expected side of 0?
+library(tidybayes)
+tidybayes::hdci(alpha_mu_diff$alpha_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(persev_mu_diff$persev_mu_diff_draws, .width = 0.95)
+# 90% CI for one-sided hypothesis
+# this seems to be the brms hypothesis function setting per (https://bookdown.org/ajkurz/DBDA_recoded/bayesian-approaches-to-testing-a-point-null-hypothesis.html) and (https://discourse.mc-stan.org/t/what-are-the-meanings-of-ci-lower-and-ci-upper-in-brms-directional-hypothesis-test/5694)
+tidybayes::hdci(alpha_mu_diff$alpha_mu_diff_draws, .width = 0.90)
+tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.90)
+tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.90)
+
+library(ggplot2)
+# make plots
+alpha_mu_diff %>%
+  ggplot(aes(x = alpha_mu_diff_draws)) +
+  # point estimate = mean; quantile interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+ 
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-0.3,0.3))+
+  xlab("learning rate")+
+  ylab("")+
+  theme_allie()+
+  ggtitle("No significant difference in Learning Rate (Sample 2)")
+
+beta_mu_diff %>%
+  ggplot(aes(x = beta_mu_diff_draws)) +
+  # point estimate = mean; quantile interval at 95%
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+ 
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-0.06,0.06))+
+  xlab("inverse temperature")+
+  ylab("")+
+  theme_allie()+
+  ggtitle("No significant difference in Inverse Temperature (Sample 2)")
+
+phi_mu_diff %>%
+  ggplot(aes(x = phi_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlim(c(-0.3,0.3))+
+  xlab("directed exploration")+
+  ylab("")+
+  theme_allie()+
+  ggtitle("More Directed Exploration in Interrogative condition (Sample 2)")
+
+persev_mu_diff %>%
+  ggplot(aes(x = persev_mu_diff_draws)) +
+  stat_halfeye(point_interval = mean_hdci, width = .95, interval_color = "red")+
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 1)+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank())+
+  xlab("hyperparameter posterior for group difference in perserveration")+
+  ylab("")+
+  theme_allie()+
+  ggtitle("Sample 2")
+```
+
+# model-derived choice classification
+
+```{r}
+# model-estimated Q value 
+delta_SMEP_Q <- as.data.frame(apply(delta_SMEP_draws$Q, c(2,3), mean))
+delta_SMEP_Q <- delta_SMEP_Q %>%
+  cbind(max_Q_choice = max.col(delta_SMEP_Q, 'first'))
+
+# directed exploration bonus 
+colnames(exploration_bonus_rep2) <- c("eb_1","eb_2","eb_3","eb_4")
+exploration_bonus_rep2 <- exploration_bonus_rep2 %>%
+  cbind(max_eb_choice = max.col(exploration_bonus_rep2, 'first'))
+
+exploration_bonus_rep2$learn_trial_n <- learn_data_rep2$learn_trial_n
+exploration_bonus_rep2$subject <- learn_data_rep2$ID_num
+exploration_bonus_rep2$condition <- as.factor(learn_data_rep2$condition)
+exploration_bonus_rep2$reward_list <- as.factor(learn_data_rep2$reward_list)
+
+# classify choice on each trial 
+choice_classification <- exploration_bonus_rep2 %>%
+  cbind(choice = learn_data_rep2$chosen_door_num) %>%
+  cbind(delta_SMEP_Q) %>%
+  mutate(choice_type = case_when(
+    choice == max_Q_choice ~ "exploitation",
+    choice == max_eb_choice ~ "directed_exploration",
+    #TRUE ~ "a_random_exploration" # to make this the default ref group for multinomial logit regression
+    TRUE ~ "random_exploration"
+  ),choice_type = as.factor(choice_type))
+
+
+# merge with learn data
+learn_data_choice_classification <- merge(learn_data_rep2, choice_classification, by.x = c("ID_num","learn_trial_n"), by.y = c("subject","learn_trial_n"))
+
+# plot
+levels_order <- c("exploitation","directed_exploration","random_exploration")
+choice_plot <- choice_classification %>%
+  group_by(subject, condition) %>%
+  count(choice_type) %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
+  geom_boxplot()+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))+
+  theme_allie()+
+  scale_color_red_blue("Condition")+
+  xlab("")+
+  ylab("number of choices (out of 100 trials)")+
+  scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
+                              "random_exploration" = "random exploration"))+
+  ggtitle("Number of Exploitation and Exploration\nChoices by Condition (Sample 2)")
+choice_plot
+
+# some stats
+library(mclogit)
+mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
+summary(mod)
+
+# pairwise comparisons
+choice_summary <- choice_classification %>%
+  group_by(subject,condition) %>%
+  count(choice_type)
+
+imp_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "imperative")
+int_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "interrogative")
+# normal distribution?
+shapiro.test(imp_exploit$n)
+# no
+# wilcoxon rank sum test. one-sided because pre-registered directional hypothesis
+wilcox.test(imp_exploit$n, int_exploit$n, alternative = "greater")
+
+imp_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "imperative")
+int_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(int_direxp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_direxp$n, int_direxp$n, alternative = "less")
+
+imp_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "imperative")
+int_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(imp_randexp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_randexp$n, int_randexp$n, alternative = "two.sided")
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "exploitation") %>%
+  ungroup())
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "directed_exploration") %>%
+  ungroup(), pooled_sd = F)
+
+effectsize::cohens_d(n~condition, data = choice_summary %>%
+  filter(choice_type == "random_exploration") %>%
+  ungroup())
+```
 
 
