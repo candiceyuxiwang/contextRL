@@ -276,10 +276,11 @@ persev_mu_diff %>%
   theme(axis.ticks.y = element_blank(),
         axis.text.y = element_blank(),
         axis.title.y = element_blank())+
-  xlab("hyperparameter posterior for group difference in perserveration")+
+  xlim(c(-0.6,0.6))+
+  xlab("perserveration")+
   ylab("")+
   theme_allie()+
-  ggtitle("Sample 1")
+  ggtitle("No significant difference in Perseveration (Sample 1)")
 ```
 
 we can classify choices based on model-estimated expected values and estimated uncertainties
@@ -322,8 +323,8 @@ choice_plot <- choice_classification %>%
   ungroup() %>%
   group_by(condition) %>%
   ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
-  geom_boxplot()+
-  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75))+
+  geom_boxplot(lwd=2)+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75), size = 2)+
   theme_allie()+
   scale_color_red_blue("Condition")+
   xlab("")+
@@ -332,6 +333,8 @@ choice_plot <- choice_classification %>%
                               "random_exploration" = "random exploration"))+
   ggtitle("Number of Exploitation and Exploration\nChoices by Condition (Sample 1)")
 choice_plot
+ggsave("/Users/candiceyuxiwang/Documents/CNAP/Projects/contextRL_misc/PNAS_revision/S1_choice_fig.png",dpi = 300, units = "in", width = 9, height = 6)
+ggsave("/Users/candiceyuxiwang/Documents/CNAP/Projects/contextRL_misc/PNAS_revision/S1_choice_fig.svg",dpi = 300, units = "in", width = 9, height = 6)
 
 # some stats
 library(mclogit)
