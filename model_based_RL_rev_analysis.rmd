@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Combine participants from S1 and S2 into one sample (N=200) since they were run on the same platform with the exact task.
+Combine participants from initial submission S1 and S2 into one sample (N=200) since they were run on the same platform with the exact task.
 
 ```{r load_data}
 library(dplyr)
@@ -207,6 +207,7 @@ model-fitting on the Cerberus (rev_analysis/combined_sample_learn_fit_delta_SMEP
 
 ```{r group_diff_params}
 # posterior draws extracted from fitted object
+# here S1 is the S1 in revised manuscript (combined data from initial S1+S2), N = 200
 delta_SMEP_draws_S1 <- readRDS("/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/fit_obj/combined_sample_learn_fit_delta_SMEP_draws.rds")
 
 library(ggdist)
@@ -324,7 +325,7 @@ choice_plot <- choice_classification %>%
   group_by(condition) %>%
   ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
   geom_boxplot(lwd=2)+
-  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75), size = 2)+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75), size = 1.5)+
   theme_allie()+
   scale_color_red_blue("Condition")+
   xlab("")+
@@ -432,10 +433,10 @@ individual level params
 
 ```{r params_extract}
 # get the point estimate (mean) for individual subject level parameters
-alphas <- apply(delta_SMEP_draws$alpha, 2, mean)
-betas <- apply(delta_SMEP_draws$beta, 2, mean)
-phis <- apply(delta_SMEP_draws$phi, 2, mean)
-persevs <- apply(delta_SMEP_draws$persev, 2, mean)
+alphas <- apply(delta_SMEP_draws_S1$alpha, 2, mean)
+betas <- apply(delta_SMEP_draws_S1$beta, 2, mean)
+phis <- apply(delta_SMEP_draws_S1$phi, 2, mean)
+persevs <- apply(delta_SMEP_draws_S1$persev, 2, mean)
 
 # combine with learn data
 for(row in 1:nrow(learn_df)){

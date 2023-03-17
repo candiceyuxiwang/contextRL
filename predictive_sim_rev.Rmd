@@ -313,21 +313,6 @@ total_reward <- function(df, plot_name){
     theme_allie()
   return(plot)
 }
-
-p_optimal <- function(df, plot_name){
-  plot <- df %>%
-    mutate(trial_bins = cut(learn_trial_n, breaks = 5))%>%
-    mutate(trial_bins = as.numeric(as.factor(trial_bins)))%>%
-    group_by(ID_num, trial_bins, reward_list) %>%
-    summarise(p_optimal = sum(optimal_choice)/n()) %>%
-    ggplot(aes(x = as.factor(trial_bins), y = p_optimal))+
-    geom_boxplot()+
-    geom_jitter(alpha = 0.5)+
-    xlab("trial bins")+
-    facet_wrap("reward_list")+
-    ggtitle(as.character(plot_name))
-  return(plot)
-}
 ```
 
 Bayes_SM:
@@ -341,9 +326,6 @@ bayes_SM_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = rn
 bayes_SM_sims <- sim_all_bayes(bayes_SM_pars$betas, bayes_SM_pars$phis, bayes_SM_pars$persevs, sim_cond)
 # total reward
 bayesSM_sim_behavior <- total_reward(bayes_SM_sims, "Bayes_SM model")
-
-# p_optimal
-p_optimal(bayes_SM_sims, "Bayes_SM model prior predictive: proportion optimal choice over time on task")
 ```
 
 ```{r posterior_bayes_SM}
@@ -406,10 +388,8 @@ bayes_SME_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = r
 bayes_SME_sims <- sim_all_bayes(bayes_SME_pars$betas, bayes_SME_pars$phis, bayes_SME_pars$persevs, sim_cond)
 # total reward
 bayesSME_sim_behavior <- total_reward(bayes_SME_sims, "Bayes_SME model")
-
-# p_optimal
-p_optimal(bayes_SME_sims, "Bayes_SME model prior predictive: proportion optimal choice over time on task")
 ```
+
 ```{r posterior_bayes_SME}
 set.seed(1)
 bayes_SME_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.06,0.005), beta_mu_diff=rnorm(1,0.03,0.01), beta_sigma= rnorm(1,0.04,0.005), 
@@ -469,10 +449,8 @@ bayes_SMP_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = r
 bayes_SMP_sims <- sim_all_bayes(bayes_SMP_pars$betas, bayes_SMP_pars$phis, bayes_SMP_pars$persevs, sim_cond)
 # total reward
 bayesSMP_sim_behavior <- total_reward(bayes_SMP_sims, "Bayes_SMP model")
-
-# p_optimal
-p_optimal(bayes_SMP_sims, "Bayes_SMP model prior predictive: proportion optimal choice over time on task")
 ```
+
 ```{r posterior_bayes_SMP}
 set.seed(1)
 bayes_SMP_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.06,0.005), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.04,0.005), 
@@ -532,15 +510,10 @@ bayes_SMEP_pars <- sub_params_bayes(beta_mu = abs(rnorm(1,0,1)), beta_mu_diff = 
 bayes_SMEP_sims <- sim_all_bayes(bayes_SMEP_pars$betas, bayes_SMEP_pars$phis, bayes_SMEP_pars$persevs, sim_cond)
 # total reward
 bayesSMEP_sim_behavior <- total_reward(bayes_SMEP_sims, "Bayes_SMEP model")
-
-# p_optimal
-p_optimal(bayes_SMEP_sims, "Bayes_SMEP model prior predictive: proportion optimal choice over time on task")
 ```
+
 ```{r posterior_bayes_SMEP}
 set.seed(1)
-# bayes_SMEP_post_pars <- sub_params_bayes_2(beta_mu = 0.06, beta_mu_diff = 0.03, beta_sigma = 0.04, 
-#                                   phi_mu = 0.12, phi_mu_diff = -0.24, phi_sigma = 0.60,
-#                                   persev_mu = 0.44, persev_mu_diff = -0.13, persev_sigma = 0.95)
 bayes_SMEP_post_pars <- sub_params_bayes_2(beta_mu=rnorm(1,0.06,0.005), beta_mu_diff=rnorm(1,0.03,0.01), beta_sigma= rnorm(1,0.04,0.005), 
                                    phi_mu = rnorm(1,0.12,0.04), phi_mu_diff = rnorm(1,-0.24,0.08), phi_sigma = rnorm(1,0.60,0.04),
                                    persev_mu = rnorm(1,0.44,0.07), persev_mu_diff = rnorm(1,-0.13,0.15), persev_sigma = rnorm(1,0.95,0.06))
@@ -553,16 +526,6 @@ bayes_SMEP_post_sims %>%
   group_by(ID_num, condition) %>%
   summarise(total_reward = sum(reward))%>%
   ggplot(aes(x = condition, y = total_reward))+
-  geom_boxplot()+
-  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange")
-
-# p_optimal
-p_optimal(bayes_SMEP_post_sims, "Bayes_SMEP model posterior predictive: proportion optimal choice over time on task")
-bayes_SMEP_post_sims %>%
-  mutate(condition = as.factor(condition))%>%
-  group_by(ID_num, condition) %>%
-  summarise(p_optimal = sum(optimal_choice))%>%
-  ggplot(aes(x = condition, y = p_optimal))+
   geom_boxplot()+
   stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange")
 
@@ -630,9 +593,8 @@ delta_SM_pars <- sub_params_delta(eta_mu = rnorm(1,0,5), eta_mu_diff = rnorm(1,0
 delta_SM_sims <- sim_all_delta(delta_SM_pars$etas, delta_SM_pars$betas, delta_SM_pars$phis, delta_SM_pars$persevs, sim_cond)
 # total reward
 deltaSM_sim_behavior <- total_reward(delta_SM_sims, "delta_SM model")
-# p_optimal
-p_optimal(delta_SM_sims, "delta_SM model prior predictive: proportion optimal choice over time on task")
 ```
+
 ```{r posterior_delta_SM}
 delta_SM_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.28,0.25), eta_mu_diff=rnorm(1,1.48,0.50), eta_sigma= rnorm(1,2.92,0.25),
                                            beta_mu=rnorm(1,0.14,0.01), beta_mu_diff=rnorm(1,0.02,0.02), beta_sigma= rnorm(1,0.14,0.01), 
@@ -679,9 +641,8 @@ delta_SME_pars <- sub_params_delta(eta_mu = rnorm(1,0,5), eta_mu_diff = rnorm(1,
 delta_SME_sims <- sim_all_delta(delta_SME_pars$etas, delta_SME_pars$betas, delta_SME_pars$phis, delta_SME_pars$persevs, sim_cond)
 # total reward
 deltaSME_sim_behavior <- total_reward(delta_SME_sims, "delta_SME model")
-# p_optimal
-p_optimal(delta_SME_sims, "delta_SME model prior predictive: proportion optimal choice over time on task")
 ```
+
 ```{r posterior_delta_SME}
 delta_SME_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.03,0.21), eta_mu_diff=rnorm(1,0.91,0.41), eta_sigma= rnorm(1,2.19,0.21),
                                            beta_mu=rnorm(1,0.10,0.01), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.06,0.01), 
@@ -728,9 +689,8 @@ delta_SMP_pars <- sub_params_delta(eta_mu = rnorm(1,0,3), eta_mu_diff = rnorm(1,
 delta_SMP_sims <- sim_all_delta(delta_SMP_pars$etas, delta_SMP_pars$betas, delta_SMP_pars$phis, delta_SMP_pars$persevs, sim_cond)
 # total reward
 deltaSMP_sim_behavior <- total_reward(delta_SMP_sims, "delta_SMP model")
-# p_optimal
-p_optimal(delta_SMP_sims, "delta_SMP model prior predictive: proportion optimal choice over time on task")
 ```
+
 ```{r posterior_delta_SMP}
 delta_SMP_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.17,0.23), eta_mu_diff=rnorm(1,1.19,0.45), eta_sigma= rnorm(1,2.51,0.23),
                                            beta_mu=rnorm(1,0.10,0.01), beta_mu_diff=rnorm(1,0.02,0.01), beta_sigma= rnorm(1,0.06,0.01), 
@@ -779,16 +739,17 @@ delta_SMEP_sims <- sim_all_delta(delta_SMEP_pars$etas, delta_SMEP_pars$betas, de
 # total reward
 deltaSMEP_sim_behavior <- total_reward(delta_SMEP_sims, "delta_SMEP model")
 
-# combine and compare with observed data
+# combine and compare with observed data from model_based_RL_rev_analysis.rmd
+### prior predictive checks
 library(ggpubr)
 ggarrange(obs_dat, deltaSM_sim_behavior, bayesSM_sim_behavior, deltaSMP_sim_behavior, bayesSMP_sim_behavior, 
           deltaSME_sim_behavior, bayesSME_sim_behavior, deltaSMEP_sim_behavior, bayesSMEP_sim_behavior,
           labels = c("A", "B", "C","D","E","F","G","H","I"),
           ncol = 3, nrow = 3)
 
-# p_optimal
-p_optimal(delta_SMEP_sims, "delta_SMEP model prior predictive: proportion optimal choice over time on task")
 ```
+
+
 ```{r posterior_delta_SMEP}
 set.seed(123)
 # hyperparameter posterior means
@@ -806,6 +767,7 @@ delta_SMEP_post_pars <- sub_params_delta_2(eta_mu=rnorm(1,-1.03,0.21), eta_mu_di
 delta_SMEP_post_sims <- sim_all_delta(delta_SMEP_post_pars$etas, delta_SMEP_post_pars$betas, delta_SMEP_post_pars$phis, delta_SMEP_post_pars$persevs, delta_SMEP_post_pars$conditions)
 # saveRDS(delta_SMEP_post_sims, "/Volumes/main2/studies/Context_RL/Analysis/rev_analysis/parameter_recovery/deltaSMEP_sim_data.RData")
 # total reward
+#### posterior predictive checks
 deltaSMEP_post_behavior <- total_reward(delta_SMEP_post_sims, "delta_SMEP model posterior predictive")
 deltaSMEP_post_points_cond <-delta_SMEP_post_sims %>%
   mutate(condition = as.factor(condition))%>%

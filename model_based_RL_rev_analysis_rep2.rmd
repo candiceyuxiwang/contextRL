@@ -1,5 +1,5 @@
 ---
-title: "model_based_RL_rev_analysis_replcation2.rmd"
+title: "model_based_RL_rev_analysis_replication2.rmd"
 author: "Candice Wang"
 date: "2023-02-24"
 output: html_document
@@ -264,4 +264,29 @@ effectsize::cohens_d(n~condition, data = choice_summary %>%
   ungroup())
 ```
 
+```{r params_extract}
+# get the point estimate (mean) for individual subject level parameters
+alphas <- apply(delta_SMEP_draws$alpha, 2, mean)
+betas <- apply(delta_SMEP_draws$beta, 2, mean)
+phis <- apply(delta_SMEP_draws$phi, 2, mean)
+persevs <- apply(delta_SMEP_draws$persev, 2, mean)
 
+# combine with learn data
+for(row in 1:nrow(learn_data_rep2)){
+  learn_data_rep2$inverse_temperature[row] <- betas[learn_data_rep2$ID_num[row]]
+  learn_data_rep2$directed_exploration[row] <- phis[learn_data_rep2$ID_num[row]]
+  learn_data_rep2$perseveration[row] <- persevs[learn_data_rep2$ID_num[row]]
+  learn_data_rep2$learning_rate[row] <- alphas[learn_data_rep2$ID_num[row]]
+}
+
+# prediction error on each trial is received - expected reward for the chosen door 
+for(row in 1:nrow(learn_data_rep2)){
+  learn_data_rep2$prediction_error[row] <- learn_data_rep2$reward[row] - delta_SMEP_Q[row, learn_data_rep2$chosen_door_num[row]]
+}
+
+# append choice type
+learn_data_rep2$choice_type <- learn_data_choice_classification$choice_type
+
+# export 
+write.csv(learn_data_rep2, file = "/Users/candiceyuxiwang/Documents/CNAP/Projects/contextRL/rep2_sample_learn_data_params.csv")
+```
