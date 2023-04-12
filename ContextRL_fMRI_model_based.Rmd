@@ -1,0 +1,335 @@
+---
+title: "ContextRL_fMRI"
+author: "Candice Wang"
+date: "2023-04-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+model-based analysis for behavioral data from fMRI
+
+```{r load_data}
+library(dplyr)
+library(ggplot2)
+# read in data 
+learn_data <- read.csv("/Volumes/main2/studies/Context_RL_fMRI/behav_data/contextRL_fMRI_learn.csv")
+
+# numerical subject ID 
+learn_data$ID_num <- as.numeric(as.factor(learn_data$ID))
+
+### door numbers
+door_key <- c("red","blue","purple","yellow", "none")
+learn_data <- learn_data %>%
+  mutate(chosen_door_num = case_when(
+    grepl(door_key[1],chosen_door) ~ 1,
+    grepl(door_key[2],chosen_door) ~ 2,
+    grepl(door_key[3],chosen_door) ~ 3,
+    grepl(door_key[4],chosen_door) ~ 4,
+    grepl(door_key[5],chosen_door) ~ 0 # missed trial
+  ))
+
+exploration_bonus <- data.frame(matrix(nrow = nrow(learn_data), ncol = 4))
+for (t in 1:(nrow(learn_data)-1)){
+  if(learn_data$learn_trial_n[t]==1){
+    exploration_bonus[t,] <- 1
+  }
+  for (i in 1:4){
+    # for each arm, see check the last time that it was chosen
+    if(length(which(learn_data$chosen_door_num[(1+(learn_data$ID_num[t]-1)*100):t] %in% i))==0){
+      exploration_bonus[t+1,i] <- t - (learn_data$ID_num[t]-1)*100 # hasn't been chosen before
+    }else{
+      exploration_bonus[t+1,i] <- t - (max(which(learn_data$chosen_door_num[(1+(learn_data$ID_num[t]-1)*100):t] %in% i)) + (learn_data$ID_num[t]-1)*100)
+    }
+  }
+}
+      
+
+# create lists for modeling
+bayes_data_list <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             madeChoiceTrials = sum(learn_data$chosen_door_num>0),
+             rewards = learn_data$reward,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))
+)
+saveRDS(bayes_data_list,"/Volumes/main2/studies/Context_RL_fMRI/behav_data/Analysis/learn_data_list_bayes.RData")
+delta_data_list <- list(
+             totalTrials = nrow(learn_data), 
+             nSubjects = length(unique(learn_data$ID)), 
+             subject = learn_data$ID_num, 
+             trialNum = learn_data$learn_trial_n,
+             choices = learn_data$chosen_door_num, 
+             madeChoiceTrials = sum(learn_data$chosen_door_num>0),
+             rewards = learn_data$reward,
+             eb = exploration_bonus,
+             condition = as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1])),
+             nSubCond1 = sum(as.numeric(as.factor(learn_data$condition[learn_data$learn_trial_n==1]))==1)
+)
+saveRDS(delta_data_list,"/Volumes/main2/studies/Context_RL_fMRI/behav_data/Analysis/learn_data_list_delta.RData")
+```
+
+model-fitting on the Cerberus
+
+```{r group_diff_params}
+# posterior draws extracted from fitted object
+delta_SMEP_draws <- readRDS("/Volumes/main2/studies/Context_RL_fMRI/behav_data/Analysis/fit_obj/learn_fit_delta_SMEP_draws.rds")
+
+library(ggdist)
+# make dataframes for hyperparamters
+alpha_mu_diff <- as.data.frame(delta_SMEP_draws$alpha_mu_diff)
+colnames(alpha_mu_diff) <- "alpha_mu_diff_draws"
+beta_mu_diff <- as.data.frame(delta_SMEP_draws$beta_mu_diff)
+colnames(beta_mu_diff) <- "beta_mu_diff_draws"
+phi_mu_diff <- as.data.frame(delta_SMEP_draws$phi_mu_diff)
+colnames(phi_mu_diff) <- "phi_mu_diff_draws"
+persev_mu_diff <- as.data.frame(delta_SMEP_draws$persev_mu_diff)
+colnames(persev_mu_diff) <- "persev_mu_diff_draws"
+library(tidybayes)
+tidybayes::hdci(alpha_mu_diff$alpha_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(beta_mu_diff$beta_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(phi_mu_diff$phi_mu_diff_draws, .width = 0.95)
+tidybayes::hdci(persev_mu_diff$persev_mu_diff_draws, .width = 0.95)
+```
+
+```{r choice_classification}
+# model-estimated Q value 
+delta_SMEP_Q <- as.data.frame(apply(delta_SMEP_draws$Q, c(2,3), mean))
+delta_SMEP_Q <- delta_SMEP_Q %>%
+  cbind(max_Q_choice = max.col(delta_SMEP_Q, 'first'))
+
+# directed exploration bonus 
+colnames(exploration_bonus) <- c("eb_1","eb_2","eb_3","eb_4")
+exploration_bonus <- exploration_bonus %>%
+  cbind(max_eb_choice = max.col(exploration_bonus, 'first'))
+
+exploration_bonus$learn_trial_n <- learn_data$learn_trial_n
+exploration_bonus$subject <- learn_data$ID_num
+exploration_bonus$condition <- as.factor(learn_data$condition)
+exploration_bonus$reward_list <- as.factor(learn_data$reward_list)
+
+# classify choice on each trial 
+choice_classification <- exploration_bonus %>%
+  cbind(choice = learn_data$chosen_door_num) %>%
+  cbind(delta_SMEP_Q) %>%
+  filter(choice > 0)%>% # exclude no-choice trials
+  mutate(choice_type = case_when(
+    choice == max_Q_choice ~ "exploitation",
+    choice == max_eb_choice ~ "directed_exploration",
+    #TRUE ~ "a_random_exploration" # to make this the default ref group for multinomial logit regression
+    TRUE ~ "random_exploration"
+  ),choice_type = as.factor(choice_type))
+
+
+# merge with learn data
+learn_data_choice_classification <- merge(learn_data, choice_classification, by.x = c("ID_num","learn_trial_n"), by.y = c("subject","learn_trial_n"), sort = FALSE)
+
+# plot
+levels_order <- c("exploitation","directed_exploration","random_exploration")
+choice_plot <- choice_classification %>%
+  group_by(subject, condition) %>%
+  count(choice_type) %>%
+  ungroup() %>%
+  group_by(condition) %>%
+  ggplot(aes(x = factor(choice_type, level = levels_order), y = n, color = condition))+
+  geom_boxplot(lwd = 2)+
+  stat_summary(fun.data=mean_se, fun.args = list(mult=1), geom="pointrange", position = position_dodge(0.75), linewidth = 1.5, size = 1.5)+
+  theme_allie()+
+  scale_color_red_blue("Condition")+
+  xlab("")+
+  ylab("number of choices (out of 100 trials)")+
+  scale_x_discrete(labels=c("exploitation" = "exploitation", "directed_exploration" = "directed exploration",
+                              "random_exploration" = "random exploration"))+
+  ggtitle("Number of Exploitation and Exploration\nChoices by Condition")
+choice_plot
+
+# some stats
+library(mclogit)
+mod <- mblogit(choice_type ~ condition + reward_list, data = choice_classification, random = ~1|subject)
+summary(mod)
+
+# pairwise comparisons
+choice_summary <- choice_classification %>%
+  group_by(subject,condition) %>%
+  count(choice_type)
+
+imp_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "imperative")
+int_exploit <- filter(choice_summary, choice_type == "exploitation") %>% filter(condition == "interrogative")
+# normal distribution?
+shapiro.test(imp_exploit$n)
+shapiro.test(int_exploit$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_exploit$n, int_exploit$n, alternative = "two.sided")
+
+imp_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "imperative")
+int_direxp <- filter(choice_summary, choice_type == "directed_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(int_direxp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_direxp$n, int_direxp$n, alternative = "two.sided")
+
+imp_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "imperative")
+int_randexp <- filter(choice_summary, choice_type == "random_exploration") %>% filter(condition == "interrogative")
+# normal distribution?
+#shapiro.test(imp_randexp$n)
+# no
+# wilcoxon rank sum test
+wilcox.test(imp_randexp$n, int_randexp$n, alternative = "two.sided")
+```
+
+make regressors for fMRI analysis
+
+```{r PE}
+# prediction error
+learn_data_choice_classification$PE <- 0 # default to 0 for no-choice trials
+for(t in 1:nrow(learn_data_choice_classification)){
+  if(learn_data_choice_classification$choice[t]>0){
+    learn_data_choice_classification$PE[t] <- learn_data_choice_classification$reward[t] - delta_SMEP_Q[t, learn_data_choice_classification$choice[t]]
+  }
+}
+
+# parametric regressor
+feedback_subset <- dplyr::select(learn_data_choice_classification, ID, learn_trial_n, feedback_start, PE)
+
+for (sub in unique(choice_subset$ID)){
+  
+  #get this sub's data
+  temp <- filter(feedback_subset, ID == sub)
+  
+  # add duration column
+  temp$duration <- 3.5
+  
+  #round start times
+  temp$feedback_start <- round(as.numeric(temp$feedback_start), 2)
+
+  #split into two runs
+  temp1 <- filter(temp, learn_trial_n < 51)
+  temp2 <- filter(temp, learn_trial_n > 50)
+  
+  #scale modulation columns
+  temp1$PE <- scale(temp1$PE)
+  temp2$PE <- scale(temp2$PE)
+  
+  #drop ID and learning trial variables
+  temp1 <- dplyr::select(temp1, -c(ID, learn_trial_n))
+  temp2 <- dplyr::select(temp2, -c(ID, learn_trial_n))
+  
+  #reorder
+  temp1 <- dplyr::select(temp1, feedback_start, duration, PE)
+  temp2 <- dplyr::select(temp2, feedback_start, duration, PE)
+  
+  #save output
+  write.table(temp1, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_PE_mod_onsets_run-1.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  write.table(temp2, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_PE_mod_onsets_run-2.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+}
+```
+
+```{r EV}
+# expected value
+learn_data_choice_classification$EV <- 0 # default to 0 for no-choice trials
+for(t in 1:nrow(learn_data_choice_classification)){
+  if(learn_data_choice_classification$choice[t]>0){
+    learn_data_choice_classification$EV[t] <- delta_SMEP_Q[t, learn_data_choice_classification$choice[t]]
+  }
+}
+
+choice_subset <- dplyr::select(learn_data_choice_classification, ID, learn_trial_n, choice_start, EV)
+
+for (sub in unique(choice_subset$ID)){
+  
+  #get this sub's data
+  temp <- filter(choice_subset, ID == sub)
+  
+  # add duration column
+  temp$duration <- 3
+  
+  #round start times
+  temp$choice_start <- round(as.numeric(temp$choice_start), 2)
+  
+  #split into two runs
+  temp1 <- filter(temp, learn_trial_n < 51)
+  temp2 <- filter(temp, learn_trial_n > 50)
+  
+  #scale modulation columns
+  temp1$EV <- scale(temp1$EV)
+  temp2$EV <- scale(temp2$EV)
+  
+  #drop ID and learning trial variables
+  temp1 <- dplyr::select(temp1, -c(ID, learn_trial_n))
+  temp2 <- dplyr::select(temp2, -c(ID, learn_trial_n))
+  
+  #reorder
+  temp1 <- dplyr::select(temp1, choice_start, duration, EV)
+  temp2 <- dplyr::select(temp2, choice_start, duration, EV)
+  
+  #save output
+  write.table(temp1, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_expectedValue_mod_onsets_run-1.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  write.table(temp2, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_expectedValue_mod_onsets_run-2.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  
+}
+```
+
+```{r choice_type}
+choice_subset <- dplyr::select(learn_data_choice_classification, ID, learn_trial_n, choice_start, choice_type)
+for (sub in unique(choice_subset$ID)){
+  #get this sub's data
+  temp <- filter(choice_subset, ID == sub)
+  
+  # add duration column
+  temp$duration <- 3
+  
+  #round start times
+  temp$choice_start <- round(as.numeric(temp$choice_start), 2)
+  
+  #add third column
+  temp$mod <- 1
+  
+  #split into two runs
+  temp1 <- filter(temp, learn_trial_n < 51)
+  temp2 <- filter(temp, learn_trial_n > 50)
+  
+  # exploitation
+  temp1_exploit <- filter(temp1, choice_type == "exploitation")
+  temp2_exploit <- filter(temp2, choice_type == "exploitation")
+  
+  #drop ID and learning trial variables
+  temp1_exploit <- dplyr::select(temp1_exploit, -c(ID, learn_trial_n, choice_type))
+  temp2_exploit <- dplyr::select(temp2_exploit, -c(ID, learn_trial_n, choice_type))
+  
+  #save output
+  write.table(temp1_exploit, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_exploit_mod_onsets_run-1.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  write.table(temp2_exploit, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_exploit_mod_onsets_run-2.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  
+  # directed exploration
+  temp1_dirExplore <- filter(temp1, choice_type == "directed_exploration")
+  temp2_dirExplore <- filter(temp2, choice_type == "directed_exploration")
+  
+  #drop ID and learning trial variables
+  temp1_dirExplore <- dplyr::select(temp1_dirExplore, -c(ID, learn_trial_n, choice_type))
+  temp2_dirExplore <- dplyr::select(temp2_dirExplore, -c(ID, learn_trial_n, choice_type))
+  
+  #save output
+  write.table(temp1_dirExplore, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_dirExplore_mod_onsets_run-1.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  write.table(temp2_dirExplore, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_dirExplore_mod_onsets_run-2.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  
+  # random exploration
+  temp1_randExplore <- filter(temp1, choice_type == "random_exploration")
+  temp2_randExplore <- filter(temp2, choice_type == "random_exploration")
+  
+  #drop ID and learning trial variables
+  temp1_randExplore <- dplyr::select(temp1_randExplore, -c(ID, learn_trial_n, choice_type))
+  temp2_randExplore <- dplyr::select(temp2_randExplore, -c(ID, learn_trial_n, choice_type))
+  
+  #save output
+  write.table(temp1_randExplore, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_randExplore_mod_onsets_run-1.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+  write.table(temp2_randExplore, paste0("/Volumes/main2/studies/Context_RL_fMRI/onsets/", sub, "_delta_randExplore_mod_onsets_run-2.tsv", sep = ""), sep = "\t", col.names = F, row.names=F)
+}
+```
+
